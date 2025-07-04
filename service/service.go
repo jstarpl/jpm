@@ -88,7 +88,6 @@ func onReady() {
 
 func startHTTPServer() {
 	app := fiber.New(fiber.Config{
-		AppName:      "JPM",
 		ServerHeader: "JPM/0.1",
 		TrustProxyConfig: fiber.TrustProxyConfig{
 			LinkLocal: false,
@@ -118,7 +117,6 @@ func startHTTPServer() {
 		c.Set("Content-Type", "text/event-stream")
 		c.Set("Cache-Control", "no-cache")
 		c.Set("Connection", "keep-alive")
-		c.Set("Transfer-Encoding", "chunked")
 
 		// c.Status(fiber.StatusOK).Context().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
 		// 	fmt.Println("WRITER")
@@ -200,7 +198,7 @@ func startIPCServer() {
 				log.Default().Fatalf("Error reading from IPC: %v", err)
 			}
 
-			log.Default().Printf("Message received: %d Length %d %v", data.MsgType, len(data.Data), string(data.Data[:]))
+			log.Default().Printf("Message received: %d %v Length %d %v", data.MsgType, data.Status, len(data.Data), string(data.Data[:]))
 
 			if data.MsgType > 0 {
 				var e api.Request
