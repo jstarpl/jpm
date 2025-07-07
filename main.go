@@ -10,14 +10,9 @@ import (
 type CLI struct {
 	Service service.Service `cmd:"" help:"Manage the JPM service."`
 
-	Ps struct{} `cmd:"" help:"List running processes."`
-
-	Start struct {
-		Name []string `name:"name" help:"Name of the process"`
-		Args []string `arg:""`
-	} `cmd:"" help:"Start a new process."`
-
-	Stop struct{} `cmd:"" help:"Stop specified process"`
+	Ps    client.Ps    `cmd:"" help:"List running processes."`
+	Start client.Start `cmd:"" help:"Start a new process."`
+	Stop  client.Stop  `cmd:"" help:"Stop specified process"`
 }
 
 func main() {
@@ -28,7 +23,9 @@ func main() {
 	case "service start":
 		service.StartService(&cli.Service)
 	case "ps":
-		client.ListProcesses()
+		client.ListProcesses(&cli.Ps)
+	case "start":
+		client.StartProcess(&cli.Start)
 	default:
 		panic(ctx.Error)
 	}

@@ -7,6 +7,10 @@ import (
 
 type MethodName string
 
+const MsgType int = 100
+
+const IPCName string = "jpm-ipc"
+
 const (
 	ListProcesses MethodName = "listProcesses"
 	StartProcess  MethodName = "startProcess"
@@ -57,20 +61,33 @@ type Request struct {
 	Params json.RawMessage `json:"params,omitempty"`
 }
 
-type ResponseParams interface {
-}
-
 type Response struct {
 	Header string          `json:"jsonrpc"`
-	Result json.RawMessage `json:"result,omitempty"`
+	Result *ResponseResult `json:"result,omitempty"`
 	Error  *ResponseError  `json:"params,omitempty"`
 	MsgID  int             `json:"id"`
 }
 
+type Process struct {
+	Id     string   `json:"id"`
+	Name   string   `json:"name,omitempty"`
+	Exec   string   `json:"exec"`
+	Arg    []string `json:"args"`
+	Env    []string `json:"env"`
+	Dir    string   `json:"cwd"`
+	Status Status   `json:"status"`
+}
+
+type ResponseResult struct {
+	Success     *string      `json:"success,omitempty"`
+	ProcessList *([]Process) `json:"processList,omitempty"`
+	ProcessId   *string      `json:"processId,omitempty"`
+}
+
 type ResponseError struct {
-	Code    int             `json:"code"`
-	Message string          `json:"string"`
-	Data    json.RawMessage `json:"data,omitempty"`
+	Code    int              `json:"code"`
+	Message string           `json:"string"`
+	Data    *json.RawMessage `json:"data,omitempty"`
 }
 
 func NewRequest(msgID int, params RequestParams) ([]byte, error) {
@@ -85,14 +102,22 @@ func NewRequest(msgID int, params RequestParams) ([]byte, error) {
 	return json.Marshal(envelope)
 }
 
-func NewSuccessResponse(msgID int, data ResponseParams) ([]byte, error) {
-	dataJson, _ := json.Marshal(data)
-
-	envelope := Response{Header: "2.0", MsgID: msgID, Result: dataJson}
+func NewSuccessResponse(msgID int, data *ResponseResult) ([]byte, error) {
+	envelope := Response{Header: "2.0", MsgID: msgID, Result: data}
 	return json.Marshal(envelope)
 }
 
 func NewErrorResponse(msgID int, code int, message string) ([]byte, error) {
 	envelope := Response{Header: "2.0", MsgID: msgID, Error: &ResponseError{Code: code, Message: message}}
 	return json.Marshal(envelope)
+}
+
+func UnmarshalResponse(data []byte) (Response, error) {
+	res := Response{}
+	err := json.Unmarshal(data, &res)
+	if err != nil {
+		return res, err
+	}
+
+	return res, nil
 }

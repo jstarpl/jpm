@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"jstarpl/jpm/api"
+	"jstarpl/jpm/service/executor"
 	"log"
 	"math/rand"
 	"time"
@@ -113,10 +114,19 @@ func startHTTPServer() {
 		return c.SendString("Hello World!")
 	})
 
+	api.Get("/processes", func(c fiber.Ctx) error {
+		c.Set("content-type", "application/json")
+		c.Set("cache-control", "no-cache")
+		c.Status(200)
+		list := executor.ListProcesses()
+		data, _ := json.Marshal(list)
+		return c.Send(data)
+	})
+
 	api.Get("/events", func(c fiber.Ctx) error {
-		c.Set("Content-Type", "text/event-stream")
-		c.Set("Cache-Control", "no-cache")
-		c.Set("Connection", "keep-alive")
+		c.Set("content-type", "text/event-stream")
+		c.Set("cache-control", "no-cache")
+		c.Set("connection", "keep-alive")
 
 		// c.Status(fiber.StatusOK).Context().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
 		// 	fmt.Println("WRITER")
@@ -186,7 +196,7 @@ func startHTTPServer() {
 }
 
 func startIPCServer() {
-	server, err := ipc.StartServer("jpm-ipc", nil)
+	server, err := ipc.StartServer(api.IPCName, nil)
 	if err != nil {
 		panic("Could not open `jpm-ipc` IPC channel. Check if the service isn't already running.")
 	}
@@ -206,11 +216,24 @@ func startIPCServer() {
 
 				if err != nil {
 					log.Default().Printf("Unknown message received: %v", data.Data)
+					errorMsg, _ := api.NewErrorResponse(e.MsgID, int(api.ParseError), "Parse error")
+					server.Write(api.MsgType, errorMsg)
+					continue
+				}
+
+				log.Default().Printf("Method requested %s", e.Method)
+				switch e.Method {
+				case api.ListProcesses:
+					list := executor.ListProcesses()
+					res, _ := api.NewSuccessResponse(e.MsgID, &api.ResponseResult{
+						ProcessList: list,
+					})
+					server.Write(api.MsgType, res)
 					continue
 				}
 
 				errorMsg, _ := api.NewErrorResponse(e.MsgID, int(api.MethodNotFound), "Method not found")
-				server.Write(1, errorMsg)
+				server.Write(api.MsgType, errorMsg)
 			}
 		}
 	})()
