@@ -3,3 +3,5 @@ webgui/dist
 
 jpm
 jpm.exe
+
+__debug*

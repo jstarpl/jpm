@@ -10,7 +10,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}",
-            "args": ["service", "start"]
+            "args": ["service", "start", "--token", "testToken"],
         },
         {
             "name": "Run `ps`",

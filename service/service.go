@@ -10,10 +10,10 @@ import (
 	"jstarpl/jpm/service/executor"
 	"log"
 	"math/rand"
+	"runtime"
 	"time"
 
 	"fyne.io/systray"
-	"fyne.io/systray/example/icon"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/gofiber/fiber/v3/middleware/static"
@@ -22,6 +22,14 @@ import (
 
 	ipc "github.com/james-barrow/golang-ipc"
 )
+
+const logProps = log.Lmicroseconds | log.Ltime | log.Ldate | log.LUTC
+
+//go:embed icons/icon.ico
+var iconIco []byte
+
+//go:embed icons/icon.svg
+var iconSvg []byte
 
 //go:embed webgui/dist/*
 var embedFS embed.FS
@@ -64,7 +72,12 @@ func StartService(cli *Service) {
 }
 
 func onReady() {
-	systray.SetIcon(icon.Data)
+	if runtime.GOOS == "windows" {
+		systray.SetIcon(iconIco)
+	} else {
+		systray.SetIcon(iconSvg)
+	}
+
 	systray.SetTitle("JPM")
 	systray.SetTooltip("2 of 2 apps working")
 	mOpen := systray.AddMenuItem("Open JPM Console", "Open JPM management console in your Web Browser")
@@ -88,6 +101,8 @@ func onReady() {
 }
 
 func startHTTPServer() {
+	logger := log.New(log.Default().Writer(), "http: ", logProps)
+
 	app := fiber.New(fiber.Config{
 		ServerHeader: "JPM/0.1",
 		TrustProxyConfig: fiber.TrustProxyConfig{
@@ -100,33 +115,47 @@ func startHTTPServer() {
 	app.Use(recover.New())
 
 	app.Use(func(c fiber.Ctx) error {
-		log.Default().Printf("%v %s %s \"%s %s %s\"", c.IP(), "-", "-", c.Method(), c.OriginalURL(), c.Protocol())
+		logger.Printf("%v %s %s \"%s %s %s\"", c.IP(), "-", "-", c.Method(), c.OriginalURL(), c.Protocol())
 
 		return c.Next()
 	})
 
-	api := app.Group("/api")
+	apiRouter := app.Group("/api")
 
-	api.Get("/", func(c fiber.Ctx) error {
+	apiRouter.Use(func(c fiber.Ctx) error {
+		headers := c.GetReqHeaders()
+		if len(headers[fiber.HeaderAuthorization]) == 0 {
+			return c.SendStatus(fiber.StatusUnauthorized)
+		}
+		auth := headers[fiber.HeaderAuthorization][0]
+		if auth != fmt.Sprintf("Bearer %s", config.Start.Token) {
+			return c.SendStatus(fiber.StatusUnauthorized)
+		}
+
+		return c.Next()
+	})
+
+	apiRouter.Get("/", func(c fiber.Ctx) error {
 		fmt.Println("🥇 First handler")
-		c.Status(200)
-		c.Set("content-type", "text/html")
+		c.Status(fiber.StatusOK)
+		c.Set(fiber.HeaderContentType, "text/html")
 		return c.SendString("Hello World!")
 	})
 
-	api.Get("/processes", func(c fiber.Ctx) error {
-		c.Set("content-type", "application/json")
-		c.Set("cache-control", "no-cache")
-		c.Status(200)
+	apiRouter.Get("/processes", func(c fiber.Ctx) error {
+		c.Set(fiber.HeaderContentType, "application/json")
+		c.Set(fiber.HeaderCacheControl, "no-cache")
+		c.Status(fiber.StatusOK)
 		list := executor.ListProcesses()
-		data, _ := json.Marshal(list)
+		res := api.Response{Header: "2.0", Result: &api.ResponseResult{ProcessList: list}, MsgID: 0}
+		data, _ := json.Marshal(res)
 		return c.Send(data)
 	})
 
-	api.Get("/events", func(c fiber.Ctx) error {
-		c.Set("content-type", "text/event-stream")
-		c.Set("cache-control", "no-cache")
-		c.Set("connection", "keep-alive")
+	apiRouter.Get("/events", func(c fiber.Ctx) error {
+		c.Set(fiber.HeaderContentType, "text/event-stream")
+		c.Set(fiber.HeaderCacheControl, "no-cache")
+		c.Set(fiber.HeaderConnection, "keep-alive")
 
 		// c.Status(fiber.StatusOK).Context().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
 		// 	fmt.Println("WRITER")
@@ -169,7 +198,7 @@ func startHTTPServer() {
 
 				err := w.Flush()
 				if err != nil {
-					log.Default().Printf("Error while flushing: %v. Closing http connection.", err)
+					logger.Printf("Error while flushing: %v. Closing http connection.", err)
 
 					break
 				}
@@ -186,7 +215,7 @@ func startHTTPServer() {
 		FS:     *webgui,
 	}))
 
-	log.Default().Printf("JPM Console at http://%s", config.Start.Listen)
+	logger.Printf("JPM Console at http://%s", config.Start.Listen)
 
 	go (func() {
 		log.Fatal(app.Listen(config.Start.Listen, fiber.ListenConfig{
@@ -201,27 +230,29 @@ func startIPCServer() {
 		panic("Could not open `jpm-ipc` IPC channel. Check if the service isn't already running.")
 	}
 
+	logger := log.New(log.Default().Writer(), "ipc: ", logProps)
+
 	go (func() {
 		for {
 			data, err := server.Read()
 			if err != nil {
-				log.Default().Fatalf("Error reading from IPC: %v", err)
+				logger.Fatalf("Error reading from IPC: %v", err)
 			}
 
-			log.Default().Printf("Message received: %d %v Length %d %v", data.MsgType, data.Status, len(data.Data), string(data.Data[:]))
+			// logger.Printf("Message received: %d %v Length %d %v", data.MsgType, data.Status, len(data.Data), string(data.Data[:]))
 
 			if data.MsgType > 0 {
 				var e api.Request
 				err = json.Unmarshal(data.Data, &e)
 
 				if err != nil {
-					log.Default().Printf("Unknown message received: %v", data.Data)
+					logger.Printf("Unknown message received: %v", data.Data)
 					errorMsg, _ := api.NewErrorResponse(e.MsgID, int(api.ParseError), "Parse error")
 					server.Write(api.MsgType, errorMsg)
 					continue
 				}
 
-				log.Default().Printf("Method requested %s", e.Method)
+				logger.Printf("Method requested %s", e.Method)
 				switch e.Method {
 				case api.ListProcesses:
 					list := executor.ListProcesses()
@@ -229,11 +260,46 @@ func startIPCServer() {
 						ProcessList: list,
 					})
 					server.Write(api.MsgType, res)
-					continue
-				}
+				case api.StartProcess:
+					var params api.RequestStartProcessParams
+					json.Unmarshal(e.Params, &params)
+					proc, err := executor.StartProcess(params.Name, params.Exec, params.Arg, params.Dir, params.Env)
+					if err != nil {
+						res, _ := api.NewErrorResponse(e.MsgID, 501, fmt.Sprintf("Could not start process: %v", err))
+						server.Write(api.MsgType, res)
+						continue
+					}
 
-				errorMsg, _ := api.NewErrorResponse(e.MsgID, int(api.MethodNotFound), "Method not found")
-				server.Write(api.MsgType, errorMsg)
+					res, _ := api.NewSuccessResponse(e.MsgID, &api.ResponseResult{Success: stringPtr("Process started"), ProcessId: &proc.Id})
+					server.Write(api.MsgType, res)
+				case api.StopProcess:
+					var params api.RequestStopProcessParams
+					json.Unmarshal(e.Params, &params)
+					err := executor.StopProcess(params.Id)
+					if err != nil {
+						res, _ := api.NewErrorResponse(e.MsgID, 501, fmt.Sprintf("Could not stop process: %v", err))
+						server.Write(api.MsgType, res)
+						continue
+					}
+
+					res, _ := api.NewSuccessResponse(e.MsgID, &api.ResponseResult{Success: stringPtr("Process stopped")})
+					server.Write(api.MsgType, res)
+				case api.DeleteProcess:
+					var params api.RequestStopProcessParams
+					json.Unmarshal(e.Params, &params)
+					err := executor.DeleteProcess(params.Id)
+					if err != nil {
+						res, _ := api.NewErrorResponse(e.MsgID, 501, fmt.Sprintf("Could not delete process: %v", err))
+						server.Write(api.MsgType, res)
+						continue
+					}
+
+					res, _ := api.NewSuccessResponse(e.MsgID, &api.ResponseResult{Success: stringPtr("Process deleted")})
+					server.Write(api.MsgType, res)
+				default:
+					errorMsg, _ := api.NewErrorResponse(e.MsgID, int(api.MethodNotFound), "Method not found")
+					server.Write(api.MsgType, errorMsg)
+				}
 			}
 		}
 	})()
@@ -252,4 +318,8 @@ func generateRandomBase36(length int) string {
 		result[i] = charset[rand.Intn(len(charset))]
 	}
 	return string(result)
+}
+
+func stringPtr(s string) *string {
+	return &s
 }

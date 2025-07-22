@@ -15,6 +15,7 @@ const (
 	ListProcesses MethodName = "listProcesses"
 	StartProcess  MethodName = "startProcess"
 	StopProcess   MethodName = "stopProcess"
+	DeleteProcess MethodName = "deleteProcess"
 )
 
 type JSONRPCErrors int
@@ -47,7 +48,19 @@ func (r RequestStartProcessParams) Type() MethodName {
 }
 
 type RequestStopProcessParams struct {
-	Id int
+	Id string
+}
+
+func (r RequestStopProcessParams) Type() MethodName {
+	return StopProcess
+}
+
+type RequestDeleteProcessParams struct {
+	Id string
+}
+
+func (r RequestDeleteProcessParams) Type() MethodName {
+	return DeleteProcess
 }
 
 type RequestParams interface {

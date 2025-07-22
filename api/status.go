@@ -32,7 +32,7 @@ var (
 		"starting": 1,
 		"stopped":  0,
 		"stopping": -1,
-		"failed":   -1,
+		"failed":   -2,
 	}
 )
 
