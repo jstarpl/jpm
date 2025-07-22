@@ -62,13 +62,14 @@ func ListProcesses() *[]api.Process {
 	i := 0
 	for id, proc := range processes {
 		result[i] = api.Process{
-			Id:     id,
-			Name:   proc.Name,
-			Exec:   proc.Exec,
-			Arg:    proc.Arg,
-			Env:    proc.Env,
-			Dir:    proc.Dir,
-			Status: proc.Status,
+			Id:       id,
+			Name:     proc.Name,
+			Exec:     proc.Exec,
+			Arg:      proc.Arg,
+			Env:      proc.Env,
+			Dir:      proc.Dir,
+			Status:   proc.Status,
+			ExitCode: proc.ExitCode,
 		}
 		i++
 	}
@@ -128,7 +129,9 @@ func StartProcess(Name string, Exec string, Arg []string, Dir string, Env []stri
 
 		logger.Printf("%s finished", newId)
 
-		proc.Status = api.Respawn
+		if proc.Status != api.Stopped && proc.Status != api.Stopping {
+			proc.Status = api.Respawn
+		}
 
 		if err != nil {
 			if exiterr, ok := err.(*exec.ExitError); ok {

@@ -65,10 +65,15 @@ func StartService(cli *Service) {
 	config = cli
 
 	if cli.Start.NoSystray {
-		startHTTPServer()
+		run()
 	} else {
 		systray.Run(onReady, onExit)
 	}
+}
+
+func run() {
+	startIPCServer()
+	startHTTPServer()
 }
 
 func onReady() {
@@ -96,8 +101,7 @@ func onReady() {
 		}
 	})()
 
-	startHTTPServer()
-	startIPCServer()
+	run()
 }
 
 func startHTTPServer() {
@@ -123,13 +127,15 @@ func startHTTPServer() {
 	apiRouter := app.Group("/api")
 
 	apiRouter.Use(func(c fiber.Ctx) error {
-		headers := c.GetReqHeaders()
-		if len(headers[fiber.HeaderAuthorization]) == 0 {
-			return c.SendStatus(fiber.StatusUnauthorized)
-		}
-		auth := headers[fiber.HeaderAuthorization][0]
-		if auth != fmt.Sprintf("Bearer %s", config.Start.Token) {
-			return c.SendStatus(fiber.StatusUnauthorized)
+		if config.Start.Token != "" {
+			headers := c.GetReqHeaders()
+			if len(headers[fiber.HeaderAuthorization]) == 0 {
+				return c.SendStatus(fiber.StatusUnauthorized)
+			}
+			auth := headers[fiber.HeaderAuthorization][0]
+			if auth != fmt.Sprintf("Bearer %s", config.Start.Token) {
+				return c.SendStatus(fiber.StatusUnauthorized)
+			}
 		}
 
 		return c.Next()
@@ -150,6 +156,30 @@ func startHTTPServer() {
 		res := api.Response{Header: "2.0", Result: &api.ResponseResult{ProcessList: list}, MsgID: 0}
 		data, _ := json.Marshal(res)
 		return c.Send(data)
+	})
+
+	apiRouter.Post("/processes/start", func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNotImplemented)
+	})
+
+	apiRouter.Get("/processes/:id", func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNotImplemented)
+	})
+
+	apiRouter.Post("/processes/:id/stop", func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNotImplemented)
+	})
+
+	apiRouter.Post("/processes/:id/restart", func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNotImplemented)
+	})
+
+	apiRouter.Delete("/processes/:id", func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNotImplemented)
+	})
+
+	apiRouter.Patch("/processes/:id", func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNotImplemented)
 	})
 
 	apiRouter.Get("/events", func(c fiber.Ctx) error {

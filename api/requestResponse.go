@@ -48,7 +48,8 @@ func (r RequestStartProcessParams) Type() MethodName {
 }
 
 type RequestStopProcessParams struct {
-	Id string
+	Id    string `json:"id,omitempty"`
+	Query string `json:"query,omitempty"`
 }
 
 func (r RequestStopProcessParams) Type() MethodName {
@@ -56,7 +57,8 @@ func (r RequestStopProcessParams) Type() MethodName {
 }
 
 type RequestDeleteProcessParams struct {
-	Id string
+	Id    string `json:"id,omitempty"`
+	Query string `json:"query,omitempty"`
 }
 
 func (r RequestDeleteProcessParams) Type() MethodName {
@@ -82,13 +84,14 @@ type Response struct {
 }
 
 type Process struct {
-	Id     string   `json:"id"`
-	Name   string   `json:"name,omitempty"`
-	Exec   string   `json:"exec"`
-	Arg    []string `json:"args"`
-	Env    []string `json:"env"`
-	Dir    string   `json:"cwd"`
-	Status Status   `json:"status"`
+	Id       string   `json:"id"`
+	Name     string   `json:"name,omitempty"`
+	Exec     string   `json:"exec"`
+	Arg      []string `json:"args"`
+	Env      []string `json:"env"`
+	Dir      string   `json:"cwd"`
+	Status   Status   `json:"status"`
+	ExitCode int      `json:"exitCode"`
 }
 
 type ResponseResult struct {
