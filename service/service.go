@@ -23,7 +23,9 @@ import (
 	ipc "github.com/james-barrow/golang-ipc"
 )
 
-const logProps = log.Lmicroseconds | log.Ltime | log.Ldate | log.LUTC
+const (
+	logProps = log.Lmicroseconds | log.Ltime | log.Ldate | log.LUTC
+)
 
 //go:embed icons/icon.ico
 var iconIco []byte
@@ -91,6 +93,7 @@ func onReady() {
 
 	go (func() {
 		<-mExit.ClickedCh
+		log.Default().Printf("Shutdown requested from systray")
 		systray.Quit()
 	})()
 
@@ -142,10 +145,7 @@ func startHTTPServer() {
 	})
 
 	apiRouter.Get("/", func(c fiber.Ctx) error {
-		fmt.Println("🥇 First handler")
-		c.Status(fiber.StatusOK)
-		c.Set(fiber.HeaderContentType, "text/html")
-		return c.SendString("Hello World!")
+		return c.SendStatus(fiber.StatusNoContent)
 	})
 
 	apiRouter.Get("/processes", func(c fiber.Ctx) error {
@@ -155,6 +155,7 @@ func startHTTPServer() {
 		list := executor.ListProcesses()
 		res := api.Response{Header: "2.0", Result: &api.ResponseResult{ProcessList: list}, MsgID: 0}
 		data, _ := json.Marshal(res)
+
 		return c.Send(data)
 	})
 
@@ -180,6 +181,22 @@ func startHTTPServer() {
 
 	apiRouter.Patch("/processes/:id", func(c fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusNotImplemented)
+	})
+
+	apiRouter.Get("/processes/:id/stdouterr", func(c fiber.Ctx) error {
+		c.Set(fiber.HeaderContentType, "text/event-stream")
+		c.Set(fiber.HeaderCacheControl, "no-cache")
+		c.Set(fiber.HeaderConnection, "keep-alive")
+
+		c.Status(fiber.StatusOK)
+
+		return nil
+	})
+
+	apiRouter.Post("/processes/:id/stdin", func(c fiber.Ctx) error {
+		// send c.BodyRaw() to process
+
+		return c.SendStatus(fiber.StatusOK)
 	})
 
 	apiRouter.Get("/events", func(c fiber.Ctx) error {
@@ -326,6 +343,11 @@ func startIPCServer() {
 
 					res, _ := api.NewSuccessResponse(e.MsgID, &api.ResponseResult{Success: stringPtr("Process deleted")})
 					server.Write(api.MsgType, res)
+				case api.RequestStopService:
+					res, _ := api.NewSuccessResponse(e.MsgID, &api.ResponseResult{Success: stringPtr("Process deleted")})
+					server.Write(api.MsgType, res)
+
+					log.Default().Fatalf("Shutdown requested over IPC")
 				default:
 					errorMsg, _ := api.NewErrorResponse(e.MsgID, int(api.MethodNotFound), "Method not found")
 					server.Write(api.MsgType, errorMsg)

@@ -12,7 +12,9 @@ import (
 	"time"
 )
 
-const stopTimeoutTime = 3 * time.Second
+const (
+	stopTimeoutTime = 3 * time.Second
+)
 
 type Process struct {
 	Id           string
@@ -24,6 +26,7 @@ type Process struct {
 	Env          []string
 	Status       api.Status
 	Cmd          *exec.Cmd
+	LastStarted  time.Time
 	RespawnDelay int
 	FailCount    int
 }
@@ -61,6 +64,13 @@ func ListProcesses() *[]api.Process {
 	result := make([]api.Process, len(processes))
 	i := 0
 	for id, proc := range processes {
+		var uptime int
+		if proc.Status == api.Running {
+			uptime = int(time.Since(proc.LastStarted).Milliseconds())
+		} else {
+			uptime = 0
+		}
+
 		result[i] = api.Process{
 			Id:       id,
 			Name:     proc.Name,
@@ -68,6 +78,7 @@ func ListProcesses() *[]api.Process {
 			Arg:      proc.Arg,
 			Env:      proc.Env,
 			Dir:      proc.Dir,
+			Uptime:   uptime,
 			Status:   proc.Status,
 			ExitCode: proc.ExitCode,
 		}
@@ -106,8 +117,11 @@ func StartProcess(Name string, Exec string, Arg []string, Dir string, Env []stri
 	checkError(err)
 	stderr, err := cmd.StderrPipe()
 	checkError(err)
+	_, err = cmd.StdinPipe()
+	checkError(err)
 
 	proc.Cmd = cmd
+	proc.LastStarted = time.Now()
 
 	err = cmd.Start()
 

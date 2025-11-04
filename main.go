@@ -11,10 +11,11 @@ import (
 type CLI struct {
 	Service service.Service `cmd:"" help:"Manage the JPM service."`
 
-	Ps     client.Ps     `cmd:"" help:"List running processes." aliases:"list"`
-	Start  client.Start  `cmd:"" help:"Start a new process." aliases:"add"`
-	Stop   client.Stop   `cmd:"" help:"Stop specified process"`
-	Delete client.Delete `cmd:"" help:"Delete specified process (implies 'stop')" aliases:"del,rm"`
+	Ps      client.Ps      `cmd:"" help:"List running processes." aliases:"list,ls"`
+	Start   client.Start   `cmd:"" help:"Start a new process." aliases:"add"`
+	Stop    client.Stop    `cmd:"" help:"Stop specified process"`
+	Restart client.Restart `cmd:"" help:"Restart an existing process"`
+	Delete  client.Delete  `cmd:"" help:"Delete specified process (implies 'stop')" aliases:"del,rm"`
 }
 
 func main() {
@@ -24,6 +25,8 @@ func main() {
 	switch ctx.Command() {
 	case "service start":
 		service.StartService(&cli.Service)
+	case "service stop":
+		client.RequestStopService()
 	case "ps":
 		client.ListProcesses(&cli.Ps)
 	case "start <args>":

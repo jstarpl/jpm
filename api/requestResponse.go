@@ -12,10 +12,11 @@ const MsgType int = 100
 const IPCName string = "jpm-ipc"
 
 const (
-	ListProcesses MethodName = "listProcesses"
-	StartProcess  MethodName = "startProcess"
-	StopProcess   MethodName = "stopProcess"
-	DeleteProcess MethodName = "deleteProcess"
+	ListProcesses      MethodName = "listProcesses"
+	StartProcess       MethodName = "startProcess"
+	StopProcess        MethodName = "stopProcess"
+	DeleteProcess      MethodName = "deleteProcess"
+	RequestStopService MethodName = "requestStopService"
 )
 
 type JSONRPCErrors int
@@ -65,6 +66,13 @@ func (r RequestDeleteProcessParams) Type() MethodName {
 	return DeleteProcess
 }
 
+type RequestStopServiceParams struct {
+}
+
+func (r RequestStopServiceParams) Type() MethodName {
+	return RequestStopService
+}
+
 type RequestParams interface {
 	Type() MethodName
 }
@@ -90,6 +98,7 @@ type Process struct {
 	Arg      []string `json:"args"`
 	Env      []string `json:"env"`
 	Dir      string   `json:"cwd"`
+	Uptime   int      `json:"uptime"`
 	Status   Status   `json:"status"`
 	ExitCode int      `json:"exitCode"`
 }

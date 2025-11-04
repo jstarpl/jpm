@@ -12,7 +12,9 @@ type ServiceConnection struct {
 	client *ipc.Client
 }
 
-const serviceConnectionTimeout = 3 * time.Second
+const (
+	serviceConnectionTimeout = 3 * time.Second
+)
 
 var (
 	ErrServiceConnection        = errors.New("could not connect to service")
