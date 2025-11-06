@@ -11,7 +11,6 @@ import (
 	"log"
 	"math/rand"
 	"runtime"
-	"time"
 
 	"fyne.io/systray"
 	"github.com/gofiber/fiber/v3"
@@ -152,13 +151,11 @@ func startHTTPServer() {
 	apiRouter.Get("/processes", func(c fiber.Ctx) error {
 		list := executor.ListProcesses()
 		res := api.Response{Header: "2.0", Result: &api.ResponseResult{ProcessList: list}, MsgID: 0}
-		data, _ := json.Marshal(res)
 
-		c.Set(fiber.HeaderContentType, "application/json")
 		c.Set(fiber.HeaderCacheControl, "no-cache")
 		c.Status(fiber.StatusOK)
 
-		return c.Send(data)
+		return c.JSON(res)
 	})
 
 	apiRouter.Post("/processes/start", func(c fiber.Ctx) error {
@@ -168,25 +165,21 @@ func startHTTPServer() {
 	apiRouter.Get("/processes/:id", func(c fiber.Ctx) error {
 		list := executor.ListProcesses()
 
-		c.Set(fiber.HeaderContentType, "application/json")
 		c.Set(fiber.HeaderCacheControl, "no-cache")
 
 		for _, process := range *list {
 			if process.Id == c.Params("id") {
 				res := api.Response{Header: "2.0", Result: &api.ResponseResult{Process: &process}, MsgID: 0}
-				data, _ := json.Marshal(res)
-
 				c.Status(fiber.StatusOK)
 
-				return c.Send(data)
+				return c.JSON(res)
 			}
 		}
 
 		c.Status(fiber.StatusNotFound)
 
 		res, _ := api.NewErrorResponse(0, 404, "Process not found")
-		data, _ := json.Marshal(res)
-		return c.Send(data)
+		return c.Send(res)
 	})
 
 	apiRouter.Post("/processes/:id/stop", func(c fiber.Ctx) error {
@@ -213,8 +206,7 @@ func startHTTPServer() {
 			c.Status(fiber.StatusNotFound)
 
 			res, _ := api.NewErrorResponse(0, 404, "Process not found")
-			data, _ := json.Marshal(res)
-			return c.Send(data)
+			return c.Send(res)
 		}
 
 		c.Set(fiber.HeaderContentType, "text/event-stream")
@@ -241,67 +233,23 @@ func startHTTPServer() {
 	})
 
 	apiRouter.Post("/processes/:id/stdin", func(c fiber.Ctx) error {
-		// send c.BodyRaw() to process
+		stdInBroadcast, err := executor.GetProcessStdStreamRelay(c.Params("id"))
+		if err != nil {
+			c.Set(fiber.HeaderContentType, "application/json")
+			c.Set(fiber.HeaderCacheControl, "no-cache")
+			c.Status(fiber.StatusNotFound)
 
-		return c.SendStatus(fiber.StatusOK)
-	})
+			res, _ := api.NewErrorResponse(0, 404, "Process not found")
+			return c.Send(res)
+		}
 
-	apiRouter.Get("/events", func(c fiber.Ctx) error {
-		c.Set(fiber.HeaderContentType, "text/event-stream")
-		c.Set(fiber.HeaderCacheControl, "no-cache")
-		c.Set(fiber.HeaderConnection, "keep-alive")
+		stdInBroadcast.Broadcast(api.StdStreamMessage{
+			Data: c.BodyRaw(),
+		})
 
-		// c.Status(fiber.StatusOK).Context().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
-		// 	fmt.Println("WRITER")
-		// 	var i int
-		// 	for {
-		// 		i++
-
-		// 		var msg string
-
-		// 		// if there are messages that have been sent to the `/publish` endpoint
-		// 		// then use these first, otherwise just send the current time
-		// 		if len(sseMessageQueue) > 0 {
-		// 			msg = fmt.Sprintf("%d - message recieved: %s", i, sseMessageQueue[0])
-		// 			// remove the message from the buffer
-		// 			sseMessageQueue = sseMessageQueue[1:]
-		// 		} else {
-		// 			msg = fmt.Sprintf("%d - the time is %v", i, time.Now())
-		// 		}
-
-		// 		fmt.Fprintf(w, "data: Message: %s\n\n", msg)
-		// 		fmt.Println(msg)
-
-		// 		err := w.Flush()
-		// 		if err != nil {
-		// 			// Refreshing page in web browser will establish a new
-		// 			// SSE connection, but only (the last) one is alive, so
-		// 			// dead connections must be closed here.
-		// 			fmt.Printf("Error while flushing: %v. Closing http connection.\n", err)
-
-		// 			break
-		// 		}
-		// 		time.Sleep(2 * time.Second)
-		// 	}
-		// }))
-
-		c.Status(fiber.StatusOK).SendStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
-			for {
-				var msg = fmt.Sprintf("the time is %v", time.Now())
-				fmt.Fprintf(w, "data: %s\n\n", msg)
-
-				err := w.Flush()
-				if err != nil {
-					logger.Printf("Error while flushing: %v. Closing http connection.", err)
-
-					break
-				}
-
-				time.Sleep(2 * time.Second)
-			}
-		}))
-
-		return nil
+		c.Status(fiber.StatusOK)
+		res, _ := api.NewSuccessResponse(0, &api.ResponseResult{Success: stringPtr("Sent")})
+		return c.Send(res)
 	})
 
 	app.Use("/", static.New("", static.Config{

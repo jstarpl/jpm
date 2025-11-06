@@ -174,6 +174,15 @@ func StartProcess(Name string, Namespace string, Exec string, Arg []string, Dir 
 	return &proc, nil
 }
 
+func GetProcessStdInStreamRelay(Id string) (*broadcast.Relay[api.StdStreamMessage], error) {
+	processes := processes[Id]
+	if processes == nil {
+		return nil, errors.New("Process not found")
+	}
+
+	return &processes.StdIn, nil
+}
+
 func GetProcessStdStreamRelay(Id string) (*broadcast.Relay[api.StdStreamMessage], error) {
 	process := processes[Id]
 	if process == nil {
