@@ -4,8 +4,10 @@ import (
 	"jstarpl/jpm/client"
 	"jstarpl/jpm/service"
 	"log"
+	"runtime"
 
 	"github.com/alecthomas/kong"
+	"github.com/ffred/guitocons"
 )
 
 type CLI struct {
@@ -19,6 +21,11 @@ type CLI struct {
 }
 
 func main() {
+	// this should probably actually use https://stackoverflow.com/questions/35428963/what-is-the-right-approach-to-encapsulate-platform-specific-code-in-go
+	if runtime.GOOS == "windows" {
+		guitocons.Guitocons()
+	}
+
 	var cli CLI
 	ctx := kong.Parse(&cli)
 

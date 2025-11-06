@@ -14,8 +14,9 @@ import (
 type Ps struct{}
 
 type Start struct {
-	Name string   `name:"name" help:"Name of the process"`
-	Args []string `arg:""`
+	Name      string   `name:"name" help:"Name of the process"`
+	Namespace string   `name:"namespace" help:"Namespace for the process, useful to group processes to address them together"`
+	Args      []string `arg:""`
 }
 
 type Stop struct {
@@ -68,11 +69,14 @@ func ListProcesses(cli *Ps) {
 	}
 
 	tw := table.NewWriter()
-	tw.AppendHeader(table.Row{"ID", "Name", "Command", "Status", "Uptime", "Args"})
+	tw.AppendHeader(table.Row{"ID", "Name", "Namespace", "Command", "Status", "⭯", "Uptime", "Args"})
 	for _, process := range *res.Result.ProcessList {
-		tw.AppendRow(table.Row{process.Id, process.Name, process.Exec, process.Status, time.Duration(process.Uptime) * time.Millisecond, strings.Join(process.Arg, " ")})
+		tw.AppendRow(table.Row{process.Id, process.Name, process.Exec, process.Status, process.StartCount, time.Duration(process.Uptime) * time.Millisecond, strings.Join(process.Arg, " ")})
 	}
 	tw.SetStyle(table.StyleRounded)
+	if len(*res.Result.ProcessList) > 0 {
+		tw.SuppressEmptyColumns()
+	}
 	fmt.Println(tw.Render())
 
 	client.Close()
@@ -91,17 +95,18 @@ func StartProcess(cli *Start) {
 	}
 
 	req := &api.RequestStartProcessParams{
-		Name: cli.Name,
-		Exec: cli.Args[0],
-		Arg:  cli.Args[1:],
-		Env:  os.Environ(),
-		Dir:  pwd,
+		Name:      cli.Name,
+		Namespace: cli.Namespace,
+		Exec:      cli.Args[0],
+		Arg:       cli.Args[1:],
+		Env:       os.Environ(),
+		Dir:       pwd,
 	}
 	SendRequest(client, 1, req)
 	res, _ := ReadResponse(client)
 
 	if res.Result != nil && res.Result.Success != nil {
-		fmt.Printf("Process started %s", *res.Result.ProcessId)
+		fmt.Printf("Process started %s\n", *res.Result.ProcessId)
 	}
 
 }
@@ -120,7 +125,7 @@ func StopProcess(cli *Stop) {
 	res, _ := ReadResponse(client)
 
 	if res.Result != nil && res.Result.Success != nil {
-		fmt.Printf("Process stopped %s", cli.Id)
+		fmt.Printf("Process stopped %s\n", cli.Id)
 	}
 }
 
@@ -138,7 +143,7 @@ func DeleteProcess(cli *Delete) {
 	res, _ := ReadResponse(client)
 
 	if res.Result != nil && res.Result.Success != nil {
-		fmt.Printf("Process deleted %s", cli.Id)
+		fmt.Printf("Process deleted %s\n", cli.Id)
 	}
 }
 
@@ -154,7 +159,7 @@ func RequestStopService() {
 	res, _ := ReadResponse(client)
 
 	if res.Result != nil && res.Result.Success != nil {
-		fmt.Printf("Requested service shutdown")
+		fmt.Printf("Requested service shutdown\n")
 	}
 }
 

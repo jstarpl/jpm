@@ -37,11 +37,12 @@ func (r RequestListProcessesParams) Type() MethodName {
 }
 
 type RequestStartProcessParams struct {
-	Name string   `json:"name,omitempty"`
-	Exec string   `json:"exec"`
-	Arg  []string `json:"args"`
-	Env  []string `json:"env"`
-	Dir  string   `json:"cwd"`
+	Name      string   `json:"name,omitempty"`
+	Namespace string   `json:"namespace,omitempty"`
+	Exec      string   `json:"exec"`
+	Arg       []string `json:"args"`
+	Env       []string `json:"env"`
+	Dir       string   `json:"cwd"`
 }
 
 func (r RequestStartProcessParams) Type() MethodName {
@@ -92,21 +93,24 @@ type Response struct {
 }
 
 type Process struct {
-	Id       string   `json:"id"`
-	Name     string   `json:"name,omitempty"`
-	Exec     string   `json:"exec"`
-	Arg      []string `json:"args"`
-	Env      []string `json:"env"`
-	Dir      string   `json:"cwd"`
-	Uptime   int      `json:"uptime"`
-	Status   Status   `json:"status"`
-	ExitCode int      `json:"exitCode"`
+	Id         string   `json:"id"`
+	Name       string   `json:"name,omitempty"`
+	Namespace  string   `json:"namespace,omitempty"`
+	Exec       string   `json:"exec"`
+	Arg        []string `json:"args"`
+	Env        []string `json:"env"`
+	Dir        string   `json:"cwd"`
+	Uptime     int      `json:"uptime,omitempty"`
+	StartCount int      `json:"startCount,omitempty"`
+	Status     Status   `json:"status"`
+	ExitCode   int      `json:"exitCode"`
 }
 
 type ResponseResult struct {
 	Success     *string      `json:"success,omitempty"`
 	ProcessList *([]Process) `json:"processList,omitempty"`
 	ProcessId   *string      `json:"processId,omitempty"`
+	Process     *Process     `json:"process,omitempty"`
 }
 
 type ResponseError struct {

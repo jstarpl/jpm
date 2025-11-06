@@ -53,6 +53,7 @@ type Service struct {
 		NoSystray bool   `name:"no-systray" help:"Do not show an icon in systray" default:"false"`
 		Listen    string `name:"listen" help:"Address to listen for API connections." default:"127.0.0.1:3000"`
 		Token     string `name:"token" help:"Bearer Token to use to authorize API requests." default:"<random>"`
+		Logs      string `name:"logs" help:"Path where the output from processes should be put." default:"<none>"`
 	} `cmd:"" help:"Start the service."`
 	Stop struct{} `cmd:"" help:"Stop the service."`
 }
@@ -149,12 +150,13 @@ func startHTTPServer() {
 	})
 
 	apiRouter.Get("/processes", func(c fiber.Ctx) error {
-		c.Set(fiber.HeaderContentType, "application/json")
-		c.Set(fiber.HeaderCacheControl, "no-cache")
-		c.Status(fiber.StatusOK)
 		list := executor.ListProcesses()
 		res := api.Response{Header: "2.0", Result: &api.ResponseResult{ProcessList: list}, MsgID: 0}
 		data, _ := json.Marshal(res)
+
+		c.Set(fiber.HeaderContentType, "application/json")
+		c.Set(fiber.HeaderCacheControl, "no-cache")
+		c.Status(fiber.StatusOK)
 
 		return c.Send(data)
 	})
@@ -164,7 +166,27 @@ func startHTTPServer() {
 	})
 
 	apiRouter.Get("/processes/:id", func(c fiber.Ctx) error {
-		return c.SendStatus(fiber.StatusNotImplemented)
+		list := executor.ListProcesses()
+
+		c.Set(fiber.HeaderContentType, "application/json")
+		c.Set(fiber.HeaderCacheControl, "no-cache")
+
+		for _, process := range *list {
+			if process.Id == c.Params("id") {
+				res := api.Response{Header: "2.0", Result: &api.ResponseResult{Process: &process}, MsgID: 0}
+				data, _ := json.Marshal(res)
+
+				c.Status(fiber.StatusOK)
+
+				return c.Send(data)
+			}
+		}
+
+		c.Status(fiber.StatusNotFound)
+
+		res, _ := api.NewErrorResponse(0, 404, "Process not found")
+		data, _ := json.Marshal(res)
+		return c.Send(data)
 	})
 
 	apiRouter.Post("/processes/:id/stop", func(c fiber.Ctx) error {
@@ -184,11 +206,36 @@ func startHTTPServer() {
 	})
 
 	apiRouter.Get("/processes/:id/stdouterr", func(c fiber.Ctx) error {
+		stdOutErrBroadcast, err := executor.GetProcessStdStreamRelay(c.Params("id"))
+		if err != nil {
+			c.Set(fiber.HeaderContentType, "application/json")
+			c.Set(fiber.HeaderCacheControl, "no-cache")
+			c.Status(fiber.StatusNotFound)
+
+			res, _ := api.NewErrorResponse(0, 404, "Process not found")
+			data, _ := json.Marshal(res)
+			return c.Send(data)
+		}
+
 		c.Set(fiber.HeaderContentType, "text/event-stream")
 		c.Set(fiber.HeaderCacheControl, "no-cache")
 		c.Set(fiber.HeaderConnection, "keep-alive")
 
-		c.Status(fiber.StatusOK)
+		l := stdOutErrBroadcast.Listener(1)
+
+		c.Status(fiber.StatusOK).SendStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
+			for n := range l.Ch() {
+				fmt.Fprintf(w, "event: %s\ndata: %s\n\n", n.StreamType, n.Data)
+
+				err := w.Flush()
+				if err != nil {
+					logger.Printf("Error while flushing: %v. Closing http connection.", err)
+
+					l.Close()
+					break
+				}
+			}
+		}))
 
 		return nil
 	})
@@ -310,7 +357,7 @@ func startIPCServer() {
 				case api.StartProcess:
 					var params api.RequestStartProcessParams
 					json.Unmarshal(e.Params, &params)
-					proc, err := executor.StartProcess(params.Name, params.Exec, params.Arg, params.Dir, params.Env)
+					proc, err := executor.StartProcess(params.Name, params.Namespace, params.Exec, params.Arg, params.Dir, params.Env)
 					if err != nil {
 						res, _ := api.NewErrorResponse(e.MsgID, 501, fmt.Sprintf("Could not start process: %v", err))
 						server.Write(api.MsgType, res)
@@ -344,7 +391,7 @@ func startIPCServer() {
 					res, _ := api.NewSuccessResponse(e.MsgID, &api.ResponseResult{Success: stringPtr("Process deleted")})
 					server.Write(api.MsgType, res)
 				case api.RequestStopService:
-					res, _ := api.NewSuccessResponse(e.MsgID, &api.ResponseResult{Success: stringPtr("Process deleted")})
+					res, _ := api.NewSuccessResponse(e.MsgID, &api.ResponseResult{Success: stringPtr("Shutting down")})
 					server.Write(api.MsgType, res)
 
 					log.Default().Fatalf("Shutdown requested over IPC")

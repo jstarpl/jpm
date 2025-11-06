@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"strconv"
 	"time"
+
+	"github.com/teivah/broadcast"
 )
 
 const (
@@ -19,6 +21,7 @@ const (
 type Process struct {
 	Id           string
 	Name         string
+	Namespace    string
 	Exec         string
 	Dir          string
 	ExitCode     int
@@ -27,8 +30,11 @@ type Process struct {
 	Status       api.Status
 	Cmd          *exec.Cmd
 	LastStarted  time.Time
+	StartCount   int
 	RespawnDelay int
 	FailCount    int
+	StdOutErr    broadcast.Relay[api.StdStreamMessage]
+	StdIn        broadcast.Relay[api.StdStreamMessage]
 }
 
 type ProcessStatusChangeEvent struct {
@@ -72,15 +78,17 @@ func ListProcesses() *[]api.Process {
 		}
 
 		result[i] = api.Process{
-			Id:       id,
-			Name:     proc.Name,
-			Exec:     proc.Exec,
-			Arg:      proc.Arg,
-			Env:      proc.Env,
-			Dir:      proc.Dir,
-			Uptime:   uptime,
-			Status:   proc.Status,
-			ExitCode: proc.ExitCode,
+			Id:         id,
+			Name:       proc.Name,
+			Namespace:  proc.Namespace,
+			Exec:       proc.Exec,
+			Arg:        proc.Arg,
+			Env:        proc.Env,
+			Dir:        proc.Dir,
+			Uptime:     uptime,
+			StartCount: proc.StartCount,
+			Status:     proc.Status,
+			ExitCode:   proc.ExitCode,
 		}
 		i++
 	}
@@ -103,10 +111,12 @@ func getNextProcessId() string {
 	return strconv.FormatInt(int64(biggestId+1), 10)
 }
 
-func StartProcess(Name string, Exec string, Arg []string, Dir string, Env []string) (*Process, error) {
+func StartProcess(Name string, Namespace string, Exec string, Arg []string, Dir string, Env []string) (*Process, error) {
 	newId := getNextProcessId()
 
-	proc := Process{Id: newId, Name: Name, Exec: Exec, Dir: Dir, Arg: Arg, Env: Env, Status: api.Starting, Cmd: nil, ExitCode: 0, RespawnDelay: 0, FailCount: 0}
+	stdOutErrRelay := broadcast.NewRelay[api.StdStreamMessage]()
+	stdInRelay := broadcast.NewRelay[api.StdStreamMessage]()
+	proc := Process{Id: newId, Name: Name, Namespace: Namespace, Exec: Exec, Dir: Dir, Arg: Arg, Env: Env, Status: api.Starting, Cmd: nil, ExitCode: 0, RespawnDelay: 0, FailCount: 0, StdOutErr: *stdOutErrRelay, StdIn: *stdInRelay}
 	processes[newId] = &proc
 
 	cmd := exec.Command(Exec, Arg...)
@@ -121,6 +131,7 @@ func StartProcess(Name string, Exec string, Arg []string, Dir string, Env []stri
 	checkError(err)
 
 	proc.Cmd = cmd
+	proc.StartCount = 1
 	proc.LastStarted = time.Now()
 
 	err = cmd.Start()
@@ -135,8 +146,8 @@ func StartProcess(Name string, Exec string, Arg []string, Dir string, Env []stri
 
 	proc.Status = api.Running
 
-	go io.Copy(os.Stdout, stdout)
-	go io.Copy(os.Stderr, stderr)
+	go readerCopyToRelay(stdOutErrRelay, stdout, api.Stdout)
+	go readerCopyToRelay(stdOutErrRelay, stderr, api.Stderr)
 
 	go (func() {
 		err := cmd.Wait()
@@ -163,6 +174,33 @@ func StartProcess(Name string, Exec string, Arg []string, Dir string, Env []stri
 	return &proc, nil
 }
 
+func GetProcessStdStreamRelay(Id string) (*broadcast.Relay[api.StdStreamMessage], error) {
+	process := processes[Id]
+	if process == nil {
+		return nil, errors.New("Process not found")
+	}
+
+	return &process.StdOutErr, nil
+}
+
+func readerCopyToRelay(dst *broadcast.Relay[api.StdStreamMessage], src io.Reader, streamType api.StreamType) {
+	for {
+		buf := make([]byte, 1024)
+		read, err := src.Read(buf)
+
+		dst.Broadcast(api.StdStreamMessage{
+			StreamType: streamType,
+			Data:       buf[0:read],
+		})
+
+		if err == io.EOF {
+			return
+		} else if err != nil {
+			logger.Printf("Error while reading from stream %v", err)
+		}
+	}
+}
+
 func DeleteProcess(Id string) error {
 	proc, ok := processes[Id]
 	if !ok {
@@ -175,6 +213,9 @@ func DeleteProcess(Id string) error {
 			return err
 		}
 	}
+
+	proc.StdOutErr.Close()
+	proc.StdIn.Close()
 
 	delete(processes, Id)
 
