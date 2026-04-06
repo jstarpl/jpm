@@ -33,8 +33,8 @@ type Process struct {
 	StartCount   int
 	RespawnDelay int
 	FailCount    int
-	StdOutErr    broadcast.Relay[api.StdStreamMessage]
-	StdIn        broadcast.Relay[api.StdStreamMessage]
+	StdOutErr    *broadcast.Relay[api.StdStreamMessage]
+	StdIn        *broadcast.Relay[api.StdStreamMessage]
 }
 
 type ProcessStatusChangeEvent struct {
@@ -116,43 +116,58 @@ func StartProcess(Name string, Namespace string, Exec string, Arg []string, Dir 
 
 	stdOutErrRelay := broadcast.NewRelay[api.StdStreamMessage]()
 	stdInRelay := broadcast.NewRelay[api.StdStreamMessage]()
-	proc := Process{Id: newId, Name: Name, Namespace: Namespace, Exec: Exec, Dir: Dir, Arg: Arg, Env: Env, Status: api.Starting, Cmd: nil, ExitCode: 0, RespawnDelay: 0, FailCount: 0, StdOutErr: *stdOutErrRelay, StdIn: *stdInRelay}
+	proc := Process{Id: newId, Name: Name, Namespace: Namespace, Exec: Exec, Dir: Dir, Arg: Arg, Env: Env, Status: api.Starting, Cmd: nil, ExitCode: 0, RespawnDelay: 0, FailCount: 0, StdOutErr: stdOutErrRelay, StdIn: stdInRelay}
 	processes[newId] = &proc
 
-	cmd := exec.Command(Exec, Arg...)
-	cmd.Dir = Dir
-	cmd.Env = Env
+	err := startProcess(&proc)
+	if err != nil {
+		return nil, err
+	}
+
+	return &proc, nil
+}
+
+func startProcess(proc *Process) error {
+	if proc == nil {
+		return errors.New("Process is nil")
+	}
+
+	cmd := exec.Command(proc.Exec, proc.Arg...)
+	cmd.Dir = proc.Dir
+	cmd.Env = proc.Env
 
 	stdout, err := cmd.StdoutPipe()
 	checkError(err)
 	stderr, err := cmd.StderrPipe()
 	checkError(err)
-	_, err = cmd.StdinPipe()
+	stdin, err := cmd.StdinPipe()
 	checkError(err)
 
 	proc.Cmd = cmd
-	proc.StartCount = 1
+	proc.StartCount++
 	proc.LastStarted = time.Now()
+	proc.Status = api.Starting
 
 	err = cmd.Start()
 
-	logger.Printf("Starting %s as %s...", proc.Exec, newId)
+	logger.Printf("Starting %s as %s...", proc.Exec, proc.Id)
 
 	if err != nil {
-		logger.Printf("Failed to start %s: %v", newId, err)
+		logger.Printf("Failed to start %s: %v", proc.Id, err)
 		proc.Status = api.Failed
-		return nil, err
+		return err
 	}
 
 	proc.Status = api.Running
 
-	go readerCopyToRelay(stdOutErrRelay, stdout, api.Stdout)
-	go readerCopyToRelay(stdOutErrRelay, stderr, api.Stderr)
+	go readerCopyToRelay(proc.StdOutErr, stdout, api.Stdout)
+	go readerCopyToRelay(proc.StdOutErr, stderr, api.Stderr)
+	go relayCopyToWriter(proc.StdIn, stdin)
 
 	go (func() {
 		err := cmd.Wait()
 
-		logger.Printf("%s finished", newId)
+		logger.Printf("%s finished", proc.Id)
 
 		if proc.Status != api.Stopped && proc.Status != api.Stopping {
 			proc.Status = api.Respawn
@@ -171,7 +186,24 @@ func StartProcess(Name string, Namespace string, Exec string, Arg []string, Dir 
 		proc.Cmd = nil
 	})()
 
-	return &proc, nil
+	return nil
+}
+
+func relayCopyToWriter(src *broadcast.Relay[api.StdStreamMessage], dst io.Writer) {
+	l := src.Listener(1)
+	defer l.Close()
+
+	for msg := range l.Ch() {
+		if len(msg.Data) == 0 {
+			continue
+		}
+
+		_, err := dst.Write(msg.Data)
+		if err != nil {
+			logger.Printf("Error while writing to stdin stream %v", err)
+			return
+		}
+	}
 }
 
 func GetProcessStdInStreamRelay(Id string) (*broadcast.Relay[api.StdStreamMessage], error) {
@@ -180,7 +212,7 @@ func GetProcessStdInStreamRelay(Id string) (*broadcast.Relay[api.StdStreamMessag
 		return nil, errors.New("Process not found")
 	}
 
-	return &processes.StdIn, nil
+	return processes.StdIn, nil
 }
 
 func GetProcessStdStreamRelay(Id string) (*broadcast.Relay[api.StdStreamMessage], error) {
@@ -189,7 +221,23 @@ func GetProcessStdStreamRelay(Id string) (*broadcast.Relay[api.StdStreamMessage]
 		return nil, errors.New("Process not found")
 	}
 
-	return &process.StdOutErr, nil
+	return process.StdOutErr, nil
+}
+
+func RestartProcess(Id string) error {
+	proc, ok := processes[Id]
+	if !ok {
+		return errors.New("Process Id not found")
+	}
+
+	if proc.Status > api.Stopped {
+		err := StopProcess(Id)
+		if err != nil {
+			return err
+		}
+	}
+
+	return startProcess(proc)
 }
 
 func readerCopyToRelay(dst *broadcast.Relay[api.StdStreamMessage], src io.Reader, streamType api.StreamType) {
@@ -223,8 +271,13 @@ func DeleteProcess(Id string) error {
 		}
 	}
 
-	proc.StdOutErr.Close()
-	proc.StdIn.Close()
+	if proc.StdOutErr != nil {
+		proc.StdOutErr.Close()
+	}
+
+	if proc.StdIn != nil {
+		proc.StdIn.Close()
+	}
 
 	delete(processes, Id)
 

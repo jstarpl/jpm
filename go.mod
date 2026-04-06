@@ -10,6 +10,7 @@ require (
 	github.com/james-barrow/golang-ipc v1.2.4
 	github.com/jedib0t/go-pretty/v6 v6.6.9
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
+	github.com/teivah/broadcast v0.1.0
 	github.com/valyala/fasthttp v1.58.0
 )
 
@@ -27,7 +28,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/philhofer/fwd v1.1.3-0.20240916144458-20a13a1f6b7c // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/teivah/broadcast v0.1.0 // indirect
 	github.com/tinylib/msgp v1.2.5 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect

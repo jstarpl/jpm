@@ -132,11 +132,19 @@ func startHTTPServer() {
 	apiRouter.Use(func(c fiber.Ctx) error {
 		if config.Start.Token != "" {
 			headers := c.GetReqHeaders()
-			if len(headers[fiber.HeaderAuthorization]) == 0 {
-				return c.SendStatus(fiber.StatusUnauthorized)
+			authOk := false
+
+			if len(headers[fiber.HeaderAuthorization]) > 0 {
+				auth := headers[fiber.HeaderAuthorization][0]
+				authOk = auth == fmt.Sprintf("Bearer %s", config.Start.Token)
 			}
-			auth := headers[fiber.HeaderAuthorization][0]
-			if auth != fmt.Sprintf("Bearer %s", config.Start.Token) {
+
+			if !authOk {
+				queryToken := c.Query("token")
+				authOk = queryToken != "" && queryToken == config.Start.Token
+			}
+
+			if !authOk {
 				return c.SendStatus(fiber.StatusUnauthorized)
 			}
 		}
@@ -183,15 +191,42 @@ func startHTTPServer() {
 	})
 
 	apiRouter.Post("/processes/:id/stop", func(c fiber.Ctx) error {
-		return c.SendStatus(fiber.StatusNotImplemented)
+		err := executor.StopProcess(c.Params("id"))
+		if err != nil {
+			res, _ := api.NewErrorResponse(0, 404, fmt.Sprintf("Could not stop process: %v", err))
+			c.Status(fiber.StatusNotFound)
+			return c.Send(res)
+		}
+
+		res, _ := api.NewSuccessResponse(0, &api.ResponseResult{Success: stringPtr("Process stopped")})
+		c.Status(fiber.StatusOK)
+		return c.Send(res)
 	})
 
 	apiRouter.Post("/processes/:id/restart", func(c fiber.Ctx) error {
-		return c.SendStatus(fiber.StatusNotImplemented)
+		err := executor.RestartProcess(c.Params("id"))
+		if err != nil {
+			res, _ := api.NewErrorResponse(0, 404, fmt.Sprintf("Could not restart process: %v", err))
+			c.Status(fiber.StatusNotFound)
+			return c.Send(res)
+		}
+
+		res, _ := api.NewSuccessResponse(0, &api.ResponseResult{Success: stringPtr("Process restarted")})
+		c.Status(fiber.StatusOK)
+		return c.Send(res)
 	})
 
 	apiRouter.Delete("/processes/:id", func(c fiber.Ctx) error {
-		return c.SendStatus(fiber.StatusNotImplemented)
+		err := executor.DeleteProcess(c.Params("id"))
+		if err != nil {
+			res, _ := api.NewErrorResponse(0, 404, fmt.Sprintf("Could not delete process: %v", err))
+			c.Status(fiber.StatusNotFound)
+			return c.Send(res)
+		}
+
+		res, _ := api.NewSuccessResponse(0, &api.ResponseResult{Success: stringPtr("Process deleted")})
+		c.Status(fiber.StatusOK)
+		return c.Send(res)
 	})
 
 	apiRouter.Patch("/processes/:id", func(c fiber.Ctx) error {
