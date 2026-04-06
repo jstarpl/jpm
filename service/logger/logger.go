@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"jstarpl/jpm/api"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -134,6 +135,7 @@ func (l *ProcessLogger) cleanup() {
 	pattern := filepath.Join(l.logDir, fmt.Sprintf("%s-%s-*.log", l.processId, l.processName))
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
+		log.Printf("logger: could not list log files for cleanup: %v", err)
 		return
 	}
 	prefix := fmt.Sprintf("%s-%s-", l.processId, l.processName)
@@ -148,7 +150,9 @@ func (l *ProcessLogger) cleanup() {
 			continue
 		}
 		if fileDate.Before(cutoff) {
-			os.Remove(filePath)
+			if err := os.Remove(filePath); err != nil {
+				log.Printf("logger: could not remove old log file %s: %v", filePath, err)
+			}
 		}
 	}
 }
