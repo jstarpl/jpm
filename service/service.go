@@ -49,10 +49,11 @@ const randomTokenLength = 32
 
 type Service struct {
 	Start struct {
-		NoSystray bool   `name:"no-systray" help:"Do not show an icon in systray" default:"false"`
-		Listen    string `name:"listen" help:"Address to listen for API connections." default:"127.0.0.1:3000"`
-		Token     string `name:"token" help:"Bearer Token to use to authorize API requests." default:"<random>"`
-		Logs      string `name:"logs" help:"Path where the output from processes should be put." default:"<none>"`
+		NoSystray        bool   `name:"no-systray" help:"Do not show an icon in systray" default:"false"`
+		Listen           string `name:"listen" help:"Address to listen for API connections." default:"127.0.0.1:3000"`
+		Token            string `name:"token" help:"Bearer Token to use to authorize API requests." default:"<random>"`
+		Logs             string `name:"logs" help:"Path where the output from processes should be put." default:"<none>"`
+		LogRetentionDays int    `name:"log-retention-days" help:"Number of days to keep process log files." default:"30"`
 	} `cmd:"" help:"Start the service."`
 	Stop struct{} `cmd:"" help:"Stop the service."`
 }
@@ -65,6 +66,10 @@ func StartService(cli *Service) {
 	}
 
 	config = cli
+
+	if cli.Start.Logs != "" && cli.Start.Logs != "<none>" {
+		executor.SetLogConfig(cli.Start.Logs, cli.Start.LogRetentionDays)
+	}
 
 	if cli.Start.NoSystray {
 		run()
