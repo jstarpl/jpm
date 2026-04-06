@@ -3,6 +3,7 @@ package executor
 import (
 	"errors"
 	"io"
+	"io/fs"
 	"jstarpl/jpm/api"
 	"log"
 	"os"
@@ -250,10 +251,11 @@ func readerCopyToRelay(dst *broadcast.Relay[api.StdStreamMessage], src io.Reader
 			Data:       buf[0:read],
 		})
 
-		if err == io.EOF {
+		if (errors.Is(err, io.EOF)) || (errors.Is(err, io.ErrClosedPipe)) || (errors.Is(err, fs.ErrClosed)) {
 			return
 		} else if err != nil {
 			logger.Printf("Error while reading from stream %v", err)
+			return
 		}
 	}
 }
