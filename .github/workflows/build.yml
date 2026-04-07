@@ -33,7 +33,7 @@ jobs:
             goarch: amd64
             output: jpm-windows-amd64.exe
             cgo_enabled: "0"
-          - os: macos-latest
+          - os: macos-14
             goos: darwin
             goarch: arm64
             output: jpm-darwin-arm64
@@ -51,6 +51,7 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
+          version: "10.13.1"
           package_json_file: service/webgui/package.json
 
       - name: Set up Node.js
