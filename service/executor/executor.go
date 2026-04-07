@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/fs"
 	"jstarpl/jpm/api"
+	"jstarpl/jpm/service/logger"
 	"log"
 	"os"
 	"os/exec"
@@ -36,6 +37,7 @@ type Process struct {
 	FailCount    int
 	StdOutErr    *broadcast.Relay[api.StdStreamMessage]
 	StdIn        *broadcast.Relay[api.StdStreamMessage]
+	Logger       *logger.ProcessLogger
 }
 
 type ProcessStatusChangeEvent struct {
@@ -52,13 +54,23 @@ type Event struct {
 }
 
 var processes map[string]*Process
-var logger *log.Logger
+var execLog *log.Logger
+
+var logsDir string
+var logRetentionDays = logger.DefaultRetentionDays
+
+// SetLogConfig configures the directory for process log files and the number
+// of days to retain them. Call before starting any processes.
+func SetLogConfig(dir string, retentionDays int) {
+	logsDir = dir
+	logRetentionDays = retentionDays
+}
 
 const logProps = log.Lmicroseconds | log.Ltime | log.Ldate | log.LUTC
 
 func init() {
 	processes = make(map[string]*Process)
-	logger = log.New(log.Default().Writer(), "executor: ", logProps)
+	execLog = log.New(log.Default().Writer(), "executor: ", logProps)
 }
 
 func checkError(err error) {
@@ -120,12 +132,36 @@ func StartProcess(Name string, Namespace string, Exec string, Arg []string, Dir 
 	proc := Process{Id: newId, Name: Name, Namespace: Namespace, Exec: Exec, Dir: Dir, Arg: Arg, Env: Env, Status: api.Starting, Cmd: nil, ExitCode: 0, RespawnDelay: 0, FailCount: 0, StdOutErr: stdOutErrRelay, StdIn: stdInRelay}
 	processes[newId] = &proc
 
+	if logsDir != "" {
+		pl, err := logger.NewProcessLogger(logsDir, newId, Name, logRetentionDays)
+		if err != nil {
+			execLog.Printf("Warning: could not create process logger for %s: %v", newId, err)
+		} else {
+			proc.Logger = pl
+			go logRelayToFile(proc.StdOutErr, pl)
+		}
+	}
+
 	err := startProcess(&proc)
 	if err != nil {
 		return nil, err
 	}
 
 	return &proc, nil
+}
+
+// logRelayToFile subscribes to a process stdout/stderr relay and writes all
+// messages to the given ProcessLogger. It closes the logger when the relay closes.
+func logRelayToFile(relay *broadcast.Relay[api.StdStreamMessage], pl *logger.ProcessLogger) {
+	l := relay.Listener(1)
+	for msg := range l.Ch() {
+		if err := pl.Write(msg); err != nil {
+			execLog.Printf("Error writing to process log: %v", err)
+		}
+	}
+	if err := pl.Close(); err != nil {
+		execLog.Printf("Error closing process log: %v", err)
+	}
 }
 
 func startProcess(proc *Process) error {
@@ -151,10 +187,10 @@ func startProcess(proc *Process) error {
 
 	err = cmd.Start()
 
-	logger.Printf("Starting %s as %s...", proc.Exec, proc.Id)
+	execLog.Printf("Starting %s as %s...", proc.Exec, proc.Id)
 
 	if err != nil {
-		logger.Printf("Failed to start %s: %v", proc.Id, err)
+		execLog.Printf("Failed to start %s: %v", proc.Id, err)
 		proc.Status = api.Failed
 		return err
 	}
@@ -168,7 +204,7 @@ func startProcess(proc *Process) error {
 	go (func() {
 		err := cmd.Wait()
 
-		logger.Printf("%s finished", proc.Id)
+		execLog.Printf("%s finished", proc.Id)
 
 		if proc.Status != api.Stopped && proc.Status != api.Stopping {
 			proc.Status = api.Respawn
@@ -201,7 +237,7 @@ func relayCopyToWriter(src *broadcast.Relay[api.StdStreamMessage], dst io.Writer
 
 		_, err := dst.Write(msg.Data)
 		if err != nil {
-			logger.Printf("Error while writing to stdin stream %v", err)
+			execLog.Printf("Error while writing to stdin stream %v", err)
 			return
 		}
 	}
@@ -254,7 +290,7 @@ func readerCopyToRelay(dst *broadcast.Relay[api.StdStreamMessage], src io.Reader
 		if (errors.Is(err, io.EOF)) || (errors.Is(err, io.ErrClosedPipe)) || (errors.Is(err, fs.ErrClosed)) {
 			return
 		} else if err != nil {
-			logger.Printf("Error while reading from stream %v", err)
+			execLog.Printf("Error while reading from stream %v", err)
 			return
 		}
 	}
@@ -301,21 +337,21 @@ func StopProcess(Id string) error {
 	}
 
 	if runtime.GOOS == "windows" {
-		logger.Printf("Shutting down %s with os.Kill", proc.Exec)
+		execLog.Printf("Shutting down %s with os.Kill", proc.Exec)
 		cmd.Process.Signal(os.Kill)
 	} else {
-		logger.Printf("Shutting down %s with os.Interrupt", proc.Exec)
+		execLog.Printf("Shutting down %s with os.Interrupt", proc.Exec)
 		cmd.Process.Signal(os.Interrupt)
 		startTime := time.Now()
 		for time.Since(startTime) < stopTimeoutTime {
 			if cmd.ProcessState != nil {
 				break
 			}
-			logger.Printf("Waiting for shutdown...")
+			execLog.Printf("Waiting for shutdown...")
 			time.Sleep(100 * time.Millisecond)
 		}
 		if cmd.ProcessState == nil {
-			logger.Printf("Forcing %s with Process.Kill()", proc.Exec)
+			execLog.Printf("Forcing %s with Process.Kill()", proc.Exec)
 			cmd.Process.Kill()
 		}
 	}
