@@ -77,14 +77,14 @@ export function CommandPalette({
           return (
             <CommandGroup key={process.id} heading={label}>
               <CommandItem
-                value={`${label} terminal open terminal ${index}`}
+                value={`${label} terminal open terminal ${process.id}`}
                 onSelect={() => openTerminalAndClose(process.id)}
               >
                 <SquareTerminal className="text-slate-400" />
                 <span>Open Terminal</span>
               </CommandItem>
               <CommandItem
-                value={`${label} restart ${index}`}
+                value={`${label} restart ${process.id}`}
                 disabled={busyActionKey === restartKey}
                 onSelect={() => runAndClose("restart", process.id)}
               >
@@ -92,7 +92,7 @@ export function CommandPalette({
                 <span>Restart</span>
               </CommandItem>
               <CommandItem
-                value={`${label} stop ${index}`}
+                value={`${label} stop ${process.id}`}
                 disabled={busyActionKey === stopKey}
                 onSelect={() => runAndClose("stop", process.id)}
               >
@@ -100,7 +100,7 @@ export function CommandPalette({
                 <span>Stop</span>
               </CommandItem>
               <CommandItem
-                value={`${label} remove delete ${index}`}
+                value={`${label} remove delete ${process.id}`}
                 disabled={busyActionKey === removeKey}
                 onSelect={() => runAndClose("remove", process.id)}
               >
