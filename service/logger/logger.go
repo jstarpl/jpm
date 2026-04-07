@@ -33,6 +33,7 @@ type ProcessLogger struct {
 	logDir        string
 	processId     string
 	processName   string
+	datePrepend   bool
 	retentionDays int
 	currentDate   time.Time
 	file          *os.File
@@ -42,7 +43,7 @@ type ProcessLogger struct {
 
 // NewProcessLogger creates a ProcessLogger that writes to logDir.
 // Log files are named "{processId}-{sanitized-processName}-YYYY-MM-DD.log".
-func NewProcessLogger(logDir, processId, processName string, retentionDays int) (*ProcessLogger, error) {
+func NewProcessLogger(logDir, processId, processName string, retentionDays int, datePrepend bool) (*ProcessLogger, error) {
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return nil, fmt.Errorf("could not create log directory: %w", err)
 	}
@@ -52,6 +53,7 @@ func NewProcessLogger(logDir, processId, processName string, retentionDays int) 
 		processId:     processId,
 		processName:   sanitizeName(processName),
 		retentionDays: retentionDays,
+		datePrepend:   datePrepend,
 	}
 	if err := l.openCurrentFile(); err != nil {
 		return nil, err
@@ -97,9 +99,16 @@ func (l *ProcessLogger) Write(msg api.StdStreamMessage) error {
 		}
 	}
 
-	_, err := fmt.Fprintf(l.writer, "[%s] [%s] %s", now.Format("2006-01-02T15:04:05.000Z"), msg.StreamType, msg.Data)
-	if err != nil {
-		return err
+	if l.datePrepend {
+		_, err := fmt.Fprintf(l.writer, "[%s] [%s] %s", now.Format("2006-01-02T15:04:05.000Z"), msg.StreamType, msg.Data)
+		if err != nil {
+			return err
+		}
+	} else {
+		_, err := fmt.Fprintf(l.writer, "%s", msg.Data)
+		if err != nil {
+			return err
+		}
 	}
 
 	return l.writer.Flush()

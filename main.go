@@ -40,6 +40,8 @@ func main() {
 		client.StartProcess(&cli.Start)
 	case "stop <id>":
 		client.StopProcess(&cli.Stop)
+	case "restart <id>":
+		client.RestartProcess(&cli.Restart)
 	case "delete <id>":
 		client.DeleteProcess(&cli.Delete)
 	default:

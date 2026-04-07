@@ -15,6 +15,7 @@ const (
 	ListProcesses      MethodName = "listProcesses"
 	StartProcess       MethodName = "startProcess"
 	StopProcess        MethodName = "stopProcess"
+	RestartProcess     MethodName = "restartProcess"
 	DeleteProcess      MethodName = "deleteProcess"
 	RequestStopService MethodName = "requestStopService"
 )
@@ -56,6 +57,15 @@ type RequestStopProcessParams struct {
 
 func (r RequestStopProcessParams) Type() MethodName {
 	return StopProcess
+}
+
+type RequestRestartProcessParams struct {
+	Id    string `json:"id,omitempty"`
+	Query string `json:"query,omitempty"`
+}
+
+func (r RequestRestartProcessParams) Type() MethodName {
+	return RestartProcess
 }
 
 type RequestDeleteProcessParams struct {
@@ -102,6 +112,7 @@ type Process struct {
 	Dir        string   `json:"cwd"`
 	Uptime     int      `json:"uptime,omitempty"`
 	StartCount int      `json:"startCount,omitempty"`
+	FailCount  int      `json:"failCount,omitempty"`
 	Status     Status   `json:"status"`
 	ExitCode   int      `json:"exitCode"`
 }

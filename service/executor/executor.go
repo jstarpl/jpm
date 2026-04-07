@@ -100,6 +100,7 @@ func ListProcesses() *[]api.Process {
 			Dir:        proc.Dir,
 			Uptime:     uptime,
 			StartCount: proc.StartCount,
+			FailCount:  proc.FailCount,
 			Status:     proc.Status,
 			ExitCode:   proc.ExitCode,
 		}
@@ -133,7 +134,7 @@ func StartProcess(Name string, Namespace string, Exec string, Arg []string, Dir 
 	processes[newId] = &proc
 
 	if logsDir != "" {
-		pl, err := logger.NewProcessLogger(logsDir, newId, Name, logRetentionDays)
+		pl, err := logger.NewProcessLogger(logsDir, newId, Name, logRetentionDays, true)
 		if err != nil {
 			execLog.Printf("Warning: could not create process logger for %s: %v", newId, err)
 		} else {
@@ -192,6 +193,7 @@ func startProcess(proc *Process) error {
 	if err != nil {
 		execLog.Printf("Failed to start %s: %v", proc.Id, err)
 		proc.Status = api.Failed
+		proc.FailCount++
 		return err
 	}
 
@@ -206,6 +208,10 @@ func startProcess(proc *Process) error {
 
 		execLog.Printf("%s finished", proc.Id)
 
+		if proc.Status != api.Stopping {
+			proc.FailCount++
+		}
+
 		if proc.Status != api.Stopped && proc.Status != api.Stopping {
 			proc.Status = api.Respawn
 		}
@@ -219,7 +225,6 @@ func startProcess(proc *Process) error {
 		} else {
 			proc.ExitCode = 0
 		}
-
 		proc.Cmd = nil
 	})()
 

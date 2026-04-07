@@ -31,7 +31,8 @@ export function ProcessTable({
               <th className="px-4 py-3 font-medium">Exec</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium">Uptime</th>
-              <th className="px-4 py-3 font-medium">Starts</th>
+              <th className="px-4 py-3 font-medium">↦</th>
+              <th className="px-4 py-3 font-medium">↻</th>
               <th className="px-4 py-3 font-medium">Exit</th>
               <th className="px-4 py-3 font-medium text-right">Actions</th>
             </tr>
@@ -73,6 +74,7 @@ export function ProcessTable({
                   </td>
                   <td className="px-4 py-3 align-middle text-slate-300">{formatUptime(process.uptime)}</td>
                   <td className="px-4 py-3 align-middle text-slate-300">{process.startCount ?? 0}</td>
+                  <td className="px-4 py-3 align-middle text-slate-300">{process.failCount ?? 0}</td>
                   <td className="px-4 py-3 align-middle text-slate-300">{process.exitCode ?? 0}</td>
                   <td className="px-4 py-3 align-middle">
                     <div className="flex flex-wrap justify-end gap-2">
