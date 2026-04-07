@@ -19,6 +19,7 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/static"
 	"github.com/pkg/browser"
 	"github.com/valyala/fasthttp"
+	"gopkg.in/yaml.v3"
 
 	ipc "github.com/james-barrow/golang-ipc"
 )
@@ -404,6 +405,38 @@ func startIPCServer() {
 					server.Write(api.MsgType, res)
 
 					log.Default().Fatalf("Shutdown requested over IPC")
+				case api.SaveProcessList:
+					var params api.RequestSaveProcessListParams
+					if err := json.Unmarshal(e.Params, &params); err != nil {
+						res, _ := api.NewErrorResponse(e.MsgID, int(api.InvalidParams), fmt.Sprintf("Invalid params: %v", err))
+						server.Write(api.MsgType, res)
+						continue
+					}
+					err := saveProcessList(params.File)
+					if err != nil {
+						res, _ := api.NewErrorResponse(e.MsgID, 501, fmt.Sprintf("Could not save process list: %v", err))
+						server.Write(api.MsgType, res)
+						continue
+					}
+
+					res, _ := api.NewSuccessResponse(e.MsgID, &api.ResponseResult{Success: stringPtr("Process list saved")})
+					server.Write(api.MsgType, res)
+				case api.RestoreProcessList:
+					var params api.RequestRestoreProcessListParams
+					if err := json.Unmarshal(e.Params, &params); err != nil {
+						res, _ := api.NewErrorResponse(e.MsgID, int(api.InvalidParams), fmt.Sprintf("Invalid params: %v", err))
+						server.Write(api.MsgType, res)
+						continue
+					}
+					err := restoreProcessList(params.File)
+					if err != nil {
+						res, _ := api.NewErrorResponse(e.MsgID, 501, fmt.Sprintf("Could not restore process list: %v", err))
+						server.Write(api.MsgType, res)
+						continue
+					}
+
+					res, _ := api.NewSuccessResponse(e.MsgID, &api.ResponseResult{Success: stringPtr("Process list restored")})
+					server.Write(api.MsgType, res)
 				default:
 					errorMsg, _ := api.NewErrorResponse(e.MsgID, int(api.MethodNotFound), "Method not found")
 					server.Write(api.MsgType, errorMsg)
@@ -415,6 +448,92 @@ func startIPCServer() {
 
 func onExit() {
 	// clean up here
+}
+
+// SaveEntry represents a single process entry in the YAML dump file.
+type SaveEntry struct {
+	Name      string   `yaml:"name,omitempty"`
+	Namespace string   `yaml:"namespace,omitempty"`
+	Exec      string   `yaml:"exec"`
+	Args      []string `yaml:"args,omitempty"`
+	Env       []string `yaml:"env,omitempty"`
+	Dir       string   `yaml:"cwd,omitempty"`
+	Status    string   `yaml:"status"`
+}
+
+func saveProcessList(file string) error {
+	list := executor.ListProcesses()
+
+	entries := make([]SaveEntry, len(*list))
+	for i, proc := range *list {
+		entries[i] = SaveEntry{
+			Name:      proc.Name,
+			Namespace: proc.Namespace,
+			Exec:      proc.Exec,
+			Args:      proc.Arg,
+			Env:       proc.Env,
+			Dir:       proc.Dir,
+			Status:    proc.Status.String(),
+		}
+	}
+
+	data, err := yaml.Marshal(entries)
+	if err != nil {
+		return fmt.Errorf("could not marshal process list: %w", err)
+	}
+
+	err = os.WriteFile(file, data, 0644)
+	if err != nil {
+		return fmt.Errorf("could not write file %s: %w", file, err)
+	}
+
+	return nil
+}
+
+func restoreProcessList(file string) error {
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return fmt.Errorf("could not read file %s: %w", file, err)
+	}
+
+	var entries []SaveEntry
+	err = yaml.Unmarshal(data, &entries)
+	if err != nil {
+		return fmt.Errorf("could not parse file %s: %w", file, err)
+	}
+
+	existingList := executor.ListProcesses()
+	existingNames := make(map[string]bool, len(*existingList))
+	existingExecDirs := make(map[string]bool, len(*existingList))
+	for _, proc := range *existingList {
+		if proc.Name != "" {
+			existingNames[proc.Name] = true
+		}
+		existingExecDirs[proc.Exec+"\x00"+proc.Dir] = true
+	}
+
+	for _, entry := range entries {
+		// Skip processes that already exist in the current process list.
+		if entry.Name != "" && existingNames[entry.Name] {
+			continue
+		}
+		if entry.Name == "" && existingExecDirs[entry.Exec+"\x00"+entry.Dir] {
+			continue
+		}
+
+		// Only start processes that were running (or starting/respawning) at save time.
+		status, err := api.ParseStatus(entry.Status)
+		if err != nil || (status != api.Running && status != api.Starting && status != api.Respawn) {
+			continue
+		}
+
+		_, startErr := executor.StartProcess(entry.Name, entry.Namespace, entry.Exec, entry.Args, entry.Dir, entry.Env)
+		if startErr != nil {
+			log.Default().Printf("Warning: could not restore process %q: %v", entry.Name, startErr)
+		}
+	}
+
+	return nil
 }
 
 const charset = "0123456789abcdefghijklmnopqrstuvwxyz"

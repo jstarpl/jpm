@@ -18,6 +18,8 @@ const (
 	RestartProcess     MethodName = "restartProcess"
 	DeleteProcess      MethodName = "deleteProcess"
 	RequestStopService MethodName = "requestStopService"
+	SaveProcessList    MethodName = "saveProcessList"
+	RestoreProcessList MethodName = "restoreProcessList"
 )
 
 type JSONRPCErrors int
@@ -82,6 +84,22 @@ type RequestStopServiceParams struct {
 
 func (r RequestStopServiceParams) Type() MethodName {
 	return RequestStopService
+}
+
+type RequestSaveProcessListParams struct {
+	File string `json:"file"`
+}
+
+func (r RequestSaveProcessListParams) Type() MethodName {
+	return SaveProcessList
+}
+
+type RequestRestoreProcessListParams struct {
+	File string `json:"file"`
+}
+
+func (r RequestRestoreProcessListParams) Type() MethodName {
+	return RestoreProcessList
 }
 
 type RequestParams interface {

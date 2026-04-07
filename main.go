@@ -16,6 +16,8 @@ type CLI struct {
 	Stop    client.Stop    `cmd:"" help:"Stop specified process"`
 	Restart client.Restart `cmd:"" help:"Restart an existing process"`
 	Delete  client.Delete  `cmd:"" help:"Delete specified process (implies 'stop')" aliases:"del,rm"`
+	Save    client.Save    `cmd:"" help:"Save the process list to a YAML file"`
+	Restore client.Restore `cmd:"" help:"Restore processes from a YAML dump file"`
 }
 
 func main() {
@@ -39,6 +41,10 @@ func main() {
 		client.RestartProcess(&cli.Restart)
 	case "delete <id>":
 		client.DeleteProcess(&cli.Delete)
+	case "save <file>":
+		client.SaveProcessList(&cli.Save)
+	case "restore <file>":
+		client.RestoreProcessList(&cli.Restore)
 	default:
 		log.Default().Printf("Unknown command %s", ctx.Command())
 		panic(ctx.Error)

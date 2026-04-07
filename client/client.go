@@ -31,6 +31,14 @@ type Delete struct {
 	Id string `arg:""`
 }
 
+type Save struct {
+	File string `arg:"" help:"File path to save the process list dump to"`
+}
+
+type Restore struct {
+	File string `arg:"" help:"File path to restore the process list from"`
+}
+
 func ListProcesses(cli *Ps) {
 	client, err := DialService()
 	if err != nil {
@@ -178,6 +186,42 @@ func RequestStopService() {
 
 	if res.Result != nil && res.Result.Success != nil {
 		fmt.Printf("Requested service shutdown\n")
+	}
+}
+
+func SaveProcessList(cli *Save) {
+	client, err := DialService()
+	if err != nil {
+		log.Fatalf("Could not connect to service: %v", err)
+	}
+	defer client.Close()
+
+	req := &api.RequestSaveProcessListParams{
+		File: cli.File,
+	}
+	SendRequest(client, 1, req)
+	res, _ := ReadResponse(client)
+
+	if res.Result != nil && res.Result.Success != nil {
+		fmt.Printf("Process list saved to %s\n", cli.File)
+	}
+}
+
+func RestoreProcessList(cli *Restore) {
+	client, err := DialService()
+	if err != nil {
+		log.Fatalf("Could not connect to service: %v", err)
+	}
+	defer client.Close()
+
+	req := &api.RequestRestoreProcessListParams{
+		File: cli.File,
+	}
+	SendRequest(client, 1, req)
+	res, _ := ReadResponse(client)
+
+	if res.Result != nil && res.Result.Success != nil {
+		fmt.Printf("Process list restored from %s\n", cli.File)
 	}
 }
 
