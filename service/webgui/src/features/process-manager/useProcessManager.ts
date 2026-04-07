@@ -69,6 +69,7 @@ export function useProcessManager() {
     busyActionKey: ui.busyActionKey,
     selectedProcess,
     terminalProcess,
+    commandPaletteOpen: ui.commandPaletteOpen,
     fetchProcesses,
     runAction,
     setSelectedProcessId: (processId: string | null) => {
@@ -76,6 +77,9 @@ export function useProcessManager() {
     },
     setTerminalProcessId: (processId: string | null) => {
       processManagerStore.terminalProcessId = processId
+    },
+    setCommandPaletteOpen: (open: boolean) => {
+      processManagerStore.commandPaletteOpen = open
     },
   }
 }

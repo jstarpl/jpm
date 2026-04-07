@@ -5,4 +5,5 @@ export const processManagerStore = proxy({
   terminalProcessId: null as string | null,
   busyActionKey: null as string | null,
   actionError: null as string | null,
+  commandPaletteOpen: false,
 })
