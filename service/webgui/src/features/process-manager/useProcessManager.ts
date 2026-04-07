@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useCallback, useMemo } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useSnapshot } from "valtio"
 import { createProcessManagerApi } from "./api"
@@ -69,13 +69,17 @@ export function useProcessManager() {
     busyActionKey: ui.busyActionKey,
     selectedProcess,
     terminalProcess,
+    commandPaletteOpen: ui.commandPaletteOpen,
     fetchProcesses,
     runAction,
-    setSelectedProcessId: (processId: string | null) => {
+    setSelectedProcessId: useCallback((processId: string | null) => {
       processManagerStore.selectedProcessId = processId
-    },
-    setTerminalProcessId: (processId: string | null) => {
+    }, []),
+    setTerminalProcessId: useCallback((processId: string | null) => {
       processManagerStore.terminalProcessId = processId
-    },
+    }, []),
+    setCommandPaletteOpen: useCallback((open: boolean) => {
+      processManagerStore.commandPaletteOpen = open
+    }, []),
   }
 }

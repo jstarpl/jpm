@@ -1,3 +1,4 @@
+import { CommandPalette } from "./CommandPalette"
 import { ProcessDetailsSheet } from "./ProcessDetailsSheet"
 import { ProcessManagerHeader } from "./ProcessManagerHeader"
 import { ProcessTable } from "./ProcessTable"
@@ -13,16 +14,18 @@ export function ProcessManagerPage() {
     busyActionKey,
     selectedProcess,
     terminalProcess,
+    commandPaletteOpen,
     fetchProcesses,
     runAction,
     setSelectedProcessId,
     setTerminalProcessId,
+    setCommandPaletteOpen,
   } = useProcessManager()
 
   return (
     <div className="min-h-svh bg-black text-slate-100">
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-        <ProcessManagerHeader token={token} error={error} onRefresh={fetchProcesses} />
+        <ProcessManagerHeader token={token} error={error} onRefresh={fetchProcesses} onOpenCommandPalette={() => setCommandPaletteOpen(true)} />
 
         <ProcessTable
           processes={processes}
@@ -44,6 +47,15 @@ export function ProcessManagerPage() {
             setTerminalProcessId(null)
           }
         }}
+      />
+
+      <CommandPalette
+        open={commandPaletteOpen}
+        onOpenChange={setCommandPaletteOpen}
+        processes={processes}
+        busyActionKey={busyActionKey}
+        onAction={runAction}
+        onOpenTerminal={setTerminalProcessId}
       />
     </div>
   )

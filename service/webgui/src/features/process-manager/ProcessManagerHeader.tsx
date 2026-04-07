@@ -5,9 +5,10 @@ type ProcessManagerHeaderProps = {
   token: string
   error: string | null
   onRefresh: () => void
+  onOpenCommandPalette: () => void
 }
 
-export function ProcessManagerHeader({ token, error, onRefresh }: ProcessManagerHeaderProps) {
+export function ProcessManagerHeader({ token, error, onRefresh, onOpenCommandPalette }: ProcessManagerHeaderProps) {
   return (
     <header className="rounded-xl border border-slate-100/10 bg-slate-950/40 p-5 backdrop-blur">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -19,6 +20,16 @@ export function ProcessManagerHeader({ token, error, onRefresh }: ProcessManager
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="border-slate-100/20 bg-slate-900/40 text-slate-100 hover:bg-slate-800"
+            onClick={onOpenCommandPalette}
+          >
+            <kbd className="pointer-events-none inline-flex h-5 select-none items-center rounded border border-slate-100/30 bg-slate-900 px-1.5 font-mono text-xs font-medium text-slate-300">
+              ~
+            </kbd>
+            Commands
+          </Button>
           <Button
             variant="outline"
             className="border-slate-100/20 bg-slate-900/40 text-slate-100 hover:bg-slate-800"
