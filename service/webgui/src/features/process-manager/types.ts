@@ -17,6 +17,7 @@ export type Process = {
   cwd: string
   uptime?: number
   startCount?: number
+  failCount?: number
   status: ProcessStatus
   exitCode?: number
 }

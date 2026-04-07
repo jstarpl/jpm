@@ -69,9 +69,9 @@ func ListProcesses(cli *Ps) {
 	}
 
 	tw := table.NewWriter()
-	tw.AppendHeader(table.Row{"ID", "Name", "Namespace", "Command", "Status", "⭯", "Uptime", "Args"})
+	tw.AppendHeader(table.Row{"ID", "Name", "Namespace", "Command", "Status", "↦", "⭯", "Uptime", "Args"})
 	for _, process := range *res.Result.ProcessList {
-		tw.AppendRow(table.Row{process.Id, process.Name, process.Exec, process.Status, process.StartCount, time.Duration(process.Uptime) * time.Millisecond, strings.Join(process.Arg, " ")})
+		tw.AppendRow(table.Row{process.Id, process.Name, process.Namespace, process.Exec, process.Status, process.StartCount, process.FailCount, time.Duration(process.Uptime) * time.Millisecond, strings.Join(process.Arg, " ")})
 	}
 	tw.SetStyle(table.StyleRounded)
 	if len(*res.Result.ProcessList) > 0 {
@@ -109,6 +109,24 @@ func StartProcess(cli *Start) {
 		fmt.Printf("Process started %s\n", *res.Result.ProcessId)
 	}
 
+}
+
+func RestartProcess(cli *Restart) {
+	client, err := DialService()
+	if err != nil {
+		log.Fatalf("Could not connect to service: %v", err)
+	}
+	defer client.Close()
+
+	req := &api.RequestRestartProcessParams{
+		Id: cli.Id,
+	}
+	SendRequest(client, 1, req)
+	res, _ := ReadResponse(client)
+
+	if res.Result != nil && res.Result.Success != nil {
+		fmt.Printf("Process restarted %s\n", cli.Id)
+	}
 }
 
 func StopProcess(cli *Stop) {

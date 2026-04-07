@@ -10,6 +10,7 @@ import (
 	"jstarpl/jpm/service/executor"
 	"log"
 	"math/rand"
+	"os"
 	"runtime"
 
 	"fyne.io/systray"
@@ -49,10 +50,11 @@ const randomTokenLength = 32
 
 type Service struct {
 	Start struct {
-		NoSystray bool   `name:"no-systray" help:"Do not show an icon in systray" default:"false"`
-		Listen    string `name:"listen" help:"Address to listen for API connections." default:"127.0.0.1:3000"`
-		Token     string `name:"token" help:"Bearer Token to use to authorize API requests." default:"<random>"`
-		Logs      string `name:"logs" help:"Path where the output from processes should be put." default:"<none>"`
+		NoSystray        bool   `name:"no-systray" help:"Do not show an icon in systray" default:"false"`
+		Listen           string `name:"listen" help:"Address to listen for API connections." default:"127.0.0.1:3000"`
+		Token            string `name:"token" help:"Bearer Token to use to authorize API requests." default:"<random>"`
+		Logs             string `name:"logs" help:"Path where the output from processes should be put." default:"<homeDir>/.jpm/logs"`
+		LogRetentionDays int    `name:"log-retention-days" help:"Number of days to keep process log files." default:"30"`
 	} `cmd:"" help:"Start the service."`
 	Stop struct{} `cmd:"" help:"Stop the service."`
 }
@@ -65,6 +67,18 @@ func StartService(cli *Service) {
 	}
 
 	config = cli
+
+	if cli.Start.Logs == "<homeDir>/.jpm/logs" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			log.Fatalf("Error getting user home directory: %v", err)
+		}
+		cli.Start.Logs = fmt.Sprintf("%s/.jpm/logs", homeDir)
+	}
+
+	if cli.Start.Logs != "" {
+		executor.SetLogConfig(cli.Start.Logs, cli.Start.LogRetentionDays)
+	}
 
 	if cli.Start.NoSystray {
 		run()
@@ -361,8 +375,20 @@ func startIPCServer() {
 
 					res, _ := api.NewSuccessResponse(e.MsgID, &api.ResponseResult{Success: stringPtr("Process stopped")})
 					server.Write(api.MsgType, res)
+				case api.RestartProcess:
+					var params api.RequestRestartProcessParams
+					json.Unmarshal(e.Params, &params)
+					err := executor.RestartProcess(params.Id)
+					if err != nil {
+						res, _ := api.NewErrorResponse(e.MsgID, 501, fmt.Sprintf("Could not restart process: %v", err))
+						server.Write(api.MsgType, res)
+						continue
+					}
+
+					res, _ := api.NewSuccessResponse(e.MsgID, &api.ResponseResult{Success: stringPtr("Process restarted")})
+					server.Write(api.MsgType, res)
 				case api.DeleteProcess:
-					var params api.RequestStopProcessParams
+					var params api.RequestDeleteProcessParams
 					json.Unmarshal(e.Params, &params)
 					err := executor.DeleteProcess(params.Id)
 					if err != nil {
