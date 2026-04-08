@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
+	"gopkg.in/yaml.v3"
 )
 
 type Ps struct{}
@@ -29,6 +30,14 @@ type Restart struct {
 
 type Delete struct {
 	Id string `arg:""`
+}
+
+type Save struct {
+	File string `arg:"" help:"File path to save the process list dump to"`
+}
+
+type Restore struct {
+	File string `arg:"" help:"File path to restore the process list from"`
 }
 
 func ListProcesses(cli *Ps) {
@@ -178,6 +187,64 @@ func RequestStopService() {
 
 	if res.Result != nil && res.Result.Success != nil {
 		fmt.Printf("Requested service shutdown\n")
+	}
+}
+
+func SaveProcessList(cli *Save) {
+	client, err := DialService()
+	if err != nil {
+		log.Fatalf("Could not connect to service: %v", err)
+	}
+	defer client.Close()
+
+	req := &api.RequestSaveProcessListParams{}
+	SendRequest(client, 1, req)
+	res, _ := ReadResponse(client)
+
+	if res.Result == nil || res.Result.SaveEntries == nil {
+		log.Fatalf("Invalid response: no save entries returned")
+	}
+
+	data, err := yaml.Marshal(res.Result.SaveEntries)
+	if err != nil {
+		log.Fatalf("Could not serialize process list: %v", err)
+	}
+
+	err = os.WriteFile(cli.File, data, 0600)
+	if err != nil {
+		log.Fatalf("Could not write file %s: %v", cli.File, err)
+	}
+
+	fmt.Printf("Process list saved to %s\n", cli.File)
+}
+
+func RestoreProcessList(cli *Restore) {
+	f, err := os.Open(cli.File)
+	if err != nil {
+		log.Fatalf("Could not open file %s: %v", cli.File, err)
+	}
+	defer f.Close()
+
+	var entries []api.SaveEntry
+	decoder := yaml.NewDecoder(f)
+	if err := decoder.Decode(&entries); err != nil {
+		log.Fatalf("Could not parse file %s: %v", cli.File, err)
+	}
+
+	client, err := DialService()
+	if err != nil {
+		log.Fatalf("Could not connect to service: %v", err)
+	}
+	defer client.Close()
+
+	req := &api.RequestRestoreProcessListParams{
+		Entries: entries,
+	}
+	SendRequest(client, 1, req)
+	res, _ := ReadResponse(client)
+
+	if res.Result != nil && res.Result.Success != nil {
+		fmt.Printf("Process list restored from %s\n", cli.File)
 	}
 }
 

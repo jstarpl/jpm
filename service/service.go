@@ -404,6 +404,26 @@ func startIPCServer() {
 					server.Write(api.MsgType, res)
 
 					log.Default().Fatalf("Shutdown requested over IPC")
+				case api.SaveProcessList:
+					entries := saveProcessList()
+					res, _ := api.NewSuccessResponse(e.MsgID, &api.ResponseResult{SaveEntries: &entries})
+					server.Write(api.MsgType, res)
+				case api.RestoreProcessList:
+					var params api.RequestRestoreProcessListParams
+					if err := json.Unmarshal(e.Params, &params); err != nil {
+						res, _ := api.NewErrorResponse(e.MsgID, int(api.InvalidParams), fmt.Sprintf("Invalid params: %v", err))
+						server.Write(api.MsgType, res)
+						continue
+					}
+					if len(params.Entries) == 0 {
+						res, _ := api.NewErrorResponse(e.MsgID, int(api.InvalidParams), "entries must not be empty")
+						server.Write(api.MsgType, res)
+						continue
+					}
+					restoreProcessList(params.Entries)
+
+					res, _ := api.NewSuccessResponse(e.MsgID, &api.ResponseResult{Success: stringPtr("Process list restored")})
+					server.Write(api.MsgType, res)
 				default:
 					errorMsg, _ := api.NewErrorResponse(e.MsgID, int(api.MethodNotFound), "Method not found")
 					server.Write(api.MsgType, errorMsg)
@@ -415,6 +435,64 @@ func startIPCServer() {
 
 func onExit() {
 	// clean up here
+}
+
+func saveProcessList() []api.SaveEntry {
+	list := executor.ListProcesses()
+
+	entries := make([]api.SaveEntry, len(*list))
+	for i, proc := range *list {
+		entries[i] = api.SaveEntry{
+			Name:      proc.Name,
+			Namespace: proc.Namespace,
+			Exec:      proc.Exec,
+			Args:      proc.Arg,
+			Env:       proc.Env,
+			Dir:       proc.Dir,
+			Status:    proc.Status.String(),
+		}
+	}
+
+	return entries
+}
+
+func restoreProcessList(entries []api.SaveEntry) {
+	existingList := executor.ListProcesses()
+	existingNames := make(map[string]bool, len(*existingList))
+	existingExecDirs := make(map[string]bool, len(*existingList))
+	for _, proc := range *existingList {
+		if proc.Name != "" {
+			existingNames[proc.Name] = true
+		}
+		existingExecDirs[proc.Exec+"\x00"+proc.Dir] = true
+	}
+
+	for _, entry := range entries {
+		// Skip processes that already exist in the current process list.
+		if entry.Name != "" && existingNames[entry.Name] {
+			continue
+		}
+		if entry.Name == "" && existingExecDirs[entry.Exec+"\x00"+entry.Dir] {
+			continue
+		}
+
+		// Only start processes that were running (or starting/respawning) at save time.
+		status, err := api.ParseStatus(entry.Status)
+		if err != nil || (status != api.Running && status != api.Starting && status != api.Respawn) {
+			continue
+		}
+
+		_, startErr := executor.StartProcess(entry.Name, entry.Namespace, entry.Exec, entry.Args, entry.Dir, entry.Env)
+		if startErr != nil {
+			log.Default().Printf(
+				"Warning: could not restore process name=%q exec=%q dir=%q: %v",
+				entry.Name,
+				entry.Exec,
+				entry.Dir,
+				startErr,
+			)
+		}
+	}
 }
 
 const charset = "0123456789abcdefghijklmnopqrstuvwxyz"

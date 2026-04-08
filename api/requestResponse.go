@@ -18,6 +18,8 @@ const (
 	RestartProcess     MethodName = "restartProcess"
 	DeleteProcess      MethodName = "deleteProcess"
 	RequestStopService MethodName = "requestStopService"
+	SaveProcessList    MethodName = "saveProcessList"
+	RestoreProcessList MethodName = "restoreProcessList"
 )
 
 type JSONRPCErrors int
@@ -84,6 +86,31 @@ func (r RequestStopServiceParams) Type() MethodName {
 	return RequestStopService
 }
 
+// SaveEntry represents a single process entry in a saved process list.
+type SaveEntry struct {
+	Name      string   `json:"name,omitempty" yaml:"name,omitempty"`
+	Namespace string   `json:"namespace,omitempty" yaml:"namespace,omitempty"`
+	Exec      string   `json:"exec" yaml:"exec"`
+	Args      []string `json:"args,omitempty" yaml:"args,omitempty"`
+	Env       []string `json:"env,omitempty" yaml:"env,omitempty"`
+	Dir       string   `json:"cwd,omitempty" yaml:"cwd,omitempty"`
+	Status    string   `json:"status" yaml:"status"`
+}
+
+type RequestSaveProcessListParams struct{}
+
+func (r RequestSaveProcessListParams) Type() MethodName {
+	return SaveProcessList
+}
+
+type RequestRestoreProcessListParams struct {
+	Entries []SaveEntry `json:"entries"`
+}
+
+func (r RequestRestoreProcessListParams) Type() MethodName {
+	return RestoreProcessList
+}
+
 type RequestParams interface {
 	Type() MethodName
 }
@@ -118,10 +145,11 @@ type Process struct {
 }
 
 type ResponseResult struct {
-	Success     *string      `json:"success,omitempty"`
-	ProcessList *([]Process) `json:"processList,omitempty"`
-	ProcessId   *string      `json:"processId,omitempty"`
-	Process     *Process     `json:"process,omitempty"`
+	Success     *string        `json:"success,omitempty"`
+	ProcessList *([]Process)   `json:"processList,omitempty"`
+	ProcessId   *string        `json:"processId,omitempty"`
+	Process     *Process       `json:"process,omitempty"`
+	SaveEntries *([]SaveEntry) `json:"saveEntries,omitempty"`
 }
 
 type ResponseError struct {
